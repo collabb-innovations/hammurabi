@@ -1,0 +1,14 @@
+{
+  "specName": "uppercase",
+  "specVersion": "0.0.1",
+  "passThreshold": 0.5,
+  "criteria": [
+    {
+      "id": "is-uppercase",
+      "name": "Output is uppercase",
+      "description": "All alphabetic characters in the output are uppercase. Non-alphabetic characters pass through unchanged.",
+      "weight": 1.0,
+      "scale": { "kind": "pass-fail" }
+    }
+  ]
+}
