@@ -17,6 +17,7 @@ export interface CriterionScore {
 export interface FixtureResult {
   fixtureId: string;
   output: unknown;
+  tags?: string[];
   scores: CriterionScore[];
   weightedScore: number;
   passed: boolean;
