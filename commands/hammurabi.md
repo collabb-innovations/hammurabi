@@ -30,8 +30,10 @@ Show the rubric to the user. Ask: which criteria are missing? Which weights are 
 
 ## Step 4: Generate fixtures
 
-From the refined spec + accepted rubric, produce `<spec-name>.fixtures.jsonl` matching the `FixtureSet` type:
+From the refined spec + accepted rubric, produce `<spec-name>.fixtures.jsonl`:
 
+- **JSONL header** on the first non-blank line: `{"specName": "<name>", "specVersion": "<version>"}` matching the spec's frontmatter exactly. This is required by Hammurabi's loader and is how bundle cross-validation works.
+- Each subsequent non-blank line is one `Fixture` object matching the `Fixture` type.
 - 6–12 fixtures covering: happy path, named edge cases from the spec, adversarial inputs that target the spec's stated risks, and at least one "this should refuse / fail gracefully" case if applicable.
 - Tag fixtures by what they exercise (e.g., `["happy-path"]`, `["edge:empty-input"]`, `["adversarial:injection"]`).
 - Include `notes` on fixtures where the judge needs context.

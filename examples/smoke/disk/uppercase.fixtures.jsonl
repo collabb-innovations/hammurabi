@@ -1,0 +1,4 @@
+{"specName":"uppercase","specVersion":"0.0.1"}
+{"id":"happy","input":"hello","expected":"HELLO","tags":["happy-path"]}
+{"id":"empty","input":"","expected":"","tags":["edge:empty-input"]}
+{"id":"mixed","input":"HeLLo World 123","expected":"HELLO WORLD 123","tags":["happy-path"]}
