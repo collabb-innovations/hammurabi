@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { loadBundle } from "../loaders/index.js";
+import { loadBundle, loadReport } from "../loaders/index.js";
 import { run } from "../runner/index.js";
 import type { Aggregator, JudgeConfig } from "../runner/types.js";
 import type { Report } from "../schema/report.js";
@@ -128,8 +128,10 @@ async function parseFlags(): Promise<ParsedFlags> {
   let regressionThreshold: number | undefined;
   if (values["regression-threshold"] !== undefined) {
     regressionThreshold = Number(values["regression-threshold"]);
-    if (Number.isNaN(regressionThreshold)) {
-      die(`--regression-threshold must be a number`);
+    if (!Number.isFinite(regressionThreshold) || regressionThreshold < 0) {
+      die(
+        `--regression-threshold must be a non-negative finite number (got ${values["regression-threshold"]})`,
+      );
     }
   }
 
@@ -137,11 +139,9 @@ async function parseFlags(): Promise<ParsedFlags> {
   if (values.baseline !== undefined) {
     const baselinePath = resolve(values.baseline);
     try {
-      baseline = JSON.parse(await readFile(baselinePath, "utf8")) as Report;
+      baseline = await loadReport(baselinePath);
     } catch (e) {
-      die(
-        `could not read baseline at ${baselinePath}: ${(e as Error).message}`,
-      );
+      die((e as Error).message);
     }
   }
 

@@ -196,3 +196,91 @@ test("renderReportMarkdown shows judge-errored votes with hint", () => {
   const md = renderReportMarkdown(r);
   assert.match(md, /judge errored: API timeout/);
 });
+
+test("renderReportMarkdown escapes pipes in fixture IDs and tags", () => {
+  const r = makeReport({
+    results: [
+      {
+        ...makeReport().results[0],
+        fixtureId: "weird|id",
+        tags: ["tag|with|pipes", "normal"],
+      },
+    ],
+  });
+  const md = renderReportMarkdown(r);
+  assert.match(md, /weird\\\|id/);
+  assert.match(md, /tag\\\|with\\\|pipes/);
+});
+
+test("renderReportMarkdown collapses newlines in table cells", () => {
+  const r = makeReport({
+    results: [
+      {
+        ...makeReport().results[0],
+        fixtureId: "line\none\ntwo",
+      },
+    ],
+  });
+  const md = renderReportMarkdown(r);
+  const fixtureRow = md
+    .split("\n")
+    .find((line) => line.startsWith("| line"));
+  assert.ok(fixtureRow, "expected a fixture row starting with | line");
+  // The collapsed cell should contain all three tokens on one line
+  assert.match(fixtureRow!, /line one two/);
+});
+
+test("renderReportMarkdown swaps to double-backtick fence when error contains a backtick", () => {
+  const r = makeReport({
+    results: [
+      {
+        fixtureId: "boom",
+        output: null,
+        scores: [],
+        weightedScore: 0,
+        passed: false,
+        error: "saw `mod` not found",
+      },
+    ],
+    summary: {
+      totalFixtures: 1,
+      passed: 0,
+      failed: 0,
+      errored: 1,
+      weightedScore: 0,
+    },
+  });
+  const md = renderReportMarkdown(r);
+  assert.match(md, /Error: `` /);
+});
+
+test("renderReportMarkdown defangs </details> in judge reasoning", () => {
+  const r = makeReport({
+    results: [
+      {
+        ...makeReport().results[0],
+        scores: [
+          {
+            criterionId: "is-correct",
+            score: 1.0,
+            reasoning: "fine",
+            judgeVotes: [
+              {
+                model: "claude-haiku-4-5",
+                score: 1.0,
+                reasoning: "ok then </details> trailing",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  const md = renderReportMarkdown(r);
+  const reasoningLine = md
+    .split("\n")
+    .find((l) => l.includes("ok then"));
+  assert.ok(reasoningLine);
+  // The verbatim </details> tag must not appear in this line — defanged.
+  assert.ok(!/<\/details>/.test(reasoningLine!));
+});

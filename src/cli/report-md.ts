@@ -2,7 +2,7 @@ import type { FixtureResult, Report } from "../schema/report.js";
 
 export function renderReportMarkdown(report: Report): string {
   const sections = [
-    `# Eval Report — ${report.specName} v${report.specVersion}`,
+    `# Eval Report — ${cell(report.specName)} v${cell(report.specVersion)}`,
     "",
     renderHeader(report),
     renderFixtureTable(report),
@@ -19,12 +19,12 @@ function renderHeader(report: Report): string {
   const regCount = s.regressions?.length ?? 0;
   const regSuffix =
     s.regressions === undefined ? " (no baseline)" : " (vs baseline)";
-  const judgeModels = report.judges.map((j) => j.model).join(", ");
+  const judgeModels = report.judges.map((j) => cell(j.model)).join(", ");
   return [
-    `- **Run ID**: ${report.runId}`,
-    `- **Started**: ${report.startedAt}`,
+    `- **Run ID**: ${cell(report.runId)}`,
+    `- **Started**: ${cell(report.startedAt)}`,
     `- **Judges**: ${judgeModels}`,
-    `- **Aggregator**: ${report.aggregator}`,
+    `- **Aggregator**: ${cell(report.aggregator)}`,
     `- **Overall**: ${s.passed}/${s.totalFixtures} passed (weighted **${s.weightedScore.toFixed(3)}**)`,
     `- **Regressions**: ${regCount}${regSuffix}`,
     "",
@@ -38,8 +38,8 @@ function statusIcon(r: FixtureResult): string {
 
 function renderFixtureTable(report: Report): string {
   const rows = report.results.map((r) => {
-    const tags = r.tags?.join(", ") ?? "";
-    return `| ${r.fixtureId} | ${tags} | ${r.weightedScore.toFixed(2)} | ${statusIcon(r)} |`;
+    const tags = r.tags?.map(cell).join(", ") ?? "";
+    return `| ${cell(r.fixtureId)} | ${tags} | ${r.weightedScore.toFixed(2)} | ${statusIcon(r)} |`;
   });
   return [
     "## Fixtures",
@@ -59,9 +59,9 @@ function renderPerFixtureDetail(report: Report): string {
 function renderFixtureDetail(report: Report, r: FixtureResult): string {
   if (r.error) {
     return [
-      `### ${r.fixtureId} — ${statusIcon(r)} errored`,
+      `### ${cell(r.fixtureId)} — ${statusIcon(r)} errored`,
       "",
-      `Error: \`${r.error}\``,
+      `Error: ${inlineCode(r.error)}`,
       "",
       "(no scores — the target failed or the fixture could not be executed)",
       "",
@@ -73,7 +73,7 @@ function renderFixtureDetail(report: Report, r: FixtureResult): string {
     const weight = c ? c.weight.toFixed(2) : "?";
     const judgeCount = s.judgeVotes.length;
     const notes = `${judgeCount} judge${judgeCount === 1 ? "" : "s"}`;
-    return `| ${s.criterionId} | ${weight} | ${s.score.toFixed(2)} | ${notes} |`;
+    return `| ${cell(s.criterionId)} | ${weight} | ${s.score.toFixed(2)} | ${notes} |`;
   });
 
   const voteSections = r.scores
@@ -81,17 +81,17 @@ function renderFixtureDetail(report: Report, r: FixtureResult): string {
       const lines = s.judgeVotes
         .map((v) => {
           const errSuffix = v.error
-            ? ` _(judge errored: ${v.error})_`
+            ? ` _(judge errored: ${detailsBody(v.error)})_`
             : "";
-          return `- **${v.model}** (${v.score.toFixed(2)}): ${v.reasoning}${errSuffix}`;
+          return `- **${detailsBody(v.model)}** (${v.score.toFixed(2)}): ${detailsBody(v.reasoning)}${errSuffix}`;
         })
         .join("\n");
-      return `**Criterion: ${s.criterionId}**\n${lines}`;
+      return `**Criterion: ${detailsBody(s.criterionId)}**\n${lines}`;
     })
     .join("\n\n");
 
   return [
-    `### ${r.fixtureId} — ${statusIcon(r)} (weighted ${r.weightedScore.toFixed(2)})`,
+    `### ${cell(r.fixtureId)} — ${statusIcon(r)} (weighted ${r.weightedScore.toFixed(2)})`,
     "",
     "| Criterion | Weight | Score | Notes |",
     "|---|---:|---:|---|",
@@ -110,7 +110,7 @@ function renderFixtureDetail(report: Report, r: FixtureResult): string {
 function renderRegressions(report: Report): string {
   const rows = report.summary.regressions!.map(
     (r) =>
-      `| ${r.fixtureId} | ${r.baselineScore.toFixed(2)} | ${r.currentScore.toFixed(2)} | ${r.delta >= 0 ? "+" : ""}${r.delta.toFixed(2)} |`,
+      `| ${cell(r.fixtureId)} | ${r.baselineScore.toFixed(2)} | ${r.currentScore.toFixed(2)} | ${r.delta >= 0 ? "+" : ""}${r.delta.toFixed(2)} |`,
   );
   return [
     "## Regressions",
@@ -120,4 +120,29 @@ function renderRegressions(report: Report): string {
     ...rows,
     "",
   ].join("\n");
+}
+
+// Escape helpers — defang user/judge-controlled text against markdown breakage.
+
+function cell(value: unknown): string {
+  // Table cells: pipes break columns, newlines break rows. Collapse both.
+  return String(value).replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+}
+
+function inlineCode(value: unknown): string {
+  // Single-backtick code span. Embed any backticks would close the span;
+  // swap to a longer fence when the content contains them.
+  const s = String(value);
+  if (!s.includes("`")) return "`" + s.replace(/\r?\n/g, " ") + "`";
+  return "`` " + s.replace(/`/g, "​`​").replace(/\r?\n/g, " ") + " ``";
+}
+
+function detailsBody(value: unknown): string {
+  // Inside a <details> block, a literal </details> or </summary> would
+  // close the block prematurely. Inject a zero-width space so the text
+  // still reads correctly but the HTML parser sees a different tag.
+  return String(value).replace(
+    /<\/(details|summary)>/gi,
+    (_, tag: string) => `</​${tag}>`,
+  );
 }

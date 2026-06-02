@@ -8,10 +8,14 @@ export {
   loadRubric,
   parseFixtures,
   loadFixtures,
+  parseReport,
+  loadReport,
   loadBundle,
   loadAll,
   SpecFrontmatterSchema,
   RubricSchema,
+  CriterionSchema,
   FixtureSchema,
+  ReportSchema,
 } from "./loaders/index.js";
 export type { Bundle } from "./loaders/index.js";

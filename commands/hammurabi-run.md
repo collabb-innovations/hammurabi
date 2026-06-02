@@ -31,9 +31,18 @@ Capture stdout, stderr, and exit code.
 
 ## Step 4: Read and summarize
 
-The CLI writes `<spec-base>.report.json` and `<spec-base>.report.md` alongside the spec (or in `--out` if the user passed it). Use the JSON file for structured access.
+Which file the CLI wrote depends on `--format`:
 
-Give the user:
+- Default `--format both`: both `<spec-base>.report.json` and `<spec-base>.report.md`
+- `--format json`: JSON only
+- `--format md`: markdown only — **no JSON**
+
+Prefer the JSON report for structured access (failures, regressions, judge votes). If `--format md` was passed, the JSON file will not exist:
+
+- Parse the header bullet list and the Fixtures table from the markdown for a coarser summary (overall pass count, weighted score, regression count from the header; per-fixture status from the table).
+- Tell the user that the chat summary is coarse-only and that deep dig-in (per-criterion judge votes) requires re-running with `--format both` or `--format json`.
+
+When JSON is available, give the user:
 
 - **Overall**: `<passed>/<total> passed, weighted <score>`
 - **Failures** (if any): list each fixture with `passed: false`, its weighted score, and its worst-scoring criterion (lowest aggregated score from `scores[]`).
