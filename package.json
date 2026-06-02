@@ -1,0 +1,45 @@
+{
+  "name": "hammurabi",
+  "version": "0.0.1",
+  "description": "Spec → rubric → fixtures → runner. Trust your outputs without re-reading every diff.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema/index.d.ts",
+      "import": "./dist/schema/index.js"
+    },
+    "./runner": {
+      "types": "./dist/runner/index.d.ts",
+      "import": "./dist/runner/index.js"
+    }
+  },
+  "files": [
+    "dist/",
+    "commands/",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "smoke": "tsx examples/smoke/run.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.74.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "tsx": "^4.19.0",
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
