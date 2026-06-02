@@ -32,6 +32,7 @@
     "build": "tsc",
     "prepare": "npm run build",
     "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
     "smoke": "tsx examples/smoke/run.ts",
     "smoke:disk": "tsx examples/smoke/disk/run.ts"
   },
