@@ -18,15 +18,35 @@ npm install github:mustermania/collabb#hammurabi-v0.0.1 --workspace=hammurabi
 
 Once stable, this will publish to npm.
 
-## Authoring commands
+## CLI
 
-Copy the slash commands into any project's `.claude/commands/`:
+Hammurabi ships a `hammurabi-run` bin (available after install via npm bin):
+
+```sh
+hammurabi-run path/to/foo.spec.md \
+  --judges claude-haiku-4-5,claude-sonnet-4-6 \
+  --aggregator min \
+  --baseline path/to/baseline.report.json
+```
+
+Writes `foo.report.json` and `foo.report.md` alongside the spec (or in `--out <dir>`). Exit codes are CI-meaningful:
+
+- `0` — all fixtures passed, no regressions
+- `1` — any failure or regression
+- `2` — could not run (bad args, malformed bundle, runner error)
+
+Run `hammurabi-run --help` for the full flag list.
+
+## Slash commands
+
+Copy them into any project's `.claude/commands/`:
 
 ```sh
 cp node_modules/hammurabi/commands/*.md .claude/commands/
 ```
 
-Then run `/hammurabi <path-to-spec.md>` to drive the 4-step authoring flow.
+- `/hammurabi <path-to-spec.md>` — 4-step authoring flow: refine spec via Q&A → generate rubric → generate fixtures
+- `/hammurabi-run <path-to-spec.md>` — invoke the CLI, then summarize the report in chat (failures, regressions, errored fixtures, judge votes)
 
 ## Schema
 
@@ -125,16 +145,12 @@ Expected cost: ~$0.02 for a single-judge run, ~$0.10 for a 2-judge panel includi
 hammurabi/
 ├── src/
 │   ├── schema/       # Spec, Rubric, Fixture, Report types
-│   ├── runner/
-│   │   ├── client.ts # Anthropic singleton + MODELS + system prompt
-│   │   ├── execute.ts# Per-target-kind fixture execution
-│   │   ├── judge.ts  # Panel orchestration + aggregation
-│   │   ├── score.ts  # Weighted score, pass/fail, regressions
-│   │   ├── schema.ts # Zod schema for judge structured output
-│   │   ├── types.ts  # RunOptions, JudgeConfig, Aggregator
-│   │   └── index.ts  # run() entrypoint
+│   ├── loaders/      # On-disk parsers (*.spec.md, *.rubric.json, *.fixtures.jsonl)
+│   ├── runner/       # Execute fixtures + judge panel + score
+│   ├── cli/          # hammurabi-run CLI + Report → markdown renderer
 │   └── index.ts
-├── commands/         # Slash commands to copy into .claude/commands/
-├── examples/smoke/   # End-to-end smoke test
+├── commands/         # /hammurabi, /hammurabi-run
+├── examples/smoke/   # End-to-end smoke (inline + disk variants)
+├── tests/            # Unit tests (tsx --test)
 └── plans/            # Approved implementation plans
 ```

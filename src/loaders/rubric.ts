@@ -14,7 +14,7 @@ const CriterionScaleSchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 
-const CriterionSchema = z
+export const CriterionSchema = z
   .object({
     id: z.string().min(1),
     name: z.string().min(1),

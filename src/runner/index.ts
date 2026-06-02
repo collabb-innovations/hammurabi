@@ -28,6 +28,7 @@ export async function run(options: RunOptions): Promise<Report> {
       results.push({
         fixtureId: fixture.id,
         output,
+        ...(fixture.tags ? { tags: fixture.tags } : {}),
         scores: [],
         weightedScore: 0,
         passed: false,
@@ -47,6 +48,7 @@ export async function run(options: RunOptions): Promise<Report> {
     results.push({
       fixtureId: fixture.id,
       output,
+      ...(fixture.tags ? { tags: fixture.tags } : {}),
       scores,
       weightedScore,
       passed,
