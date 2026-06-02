@@ -41,6 +41,13 @@ export function parseFixtures(content: string, source = "<inline>"): FixtureSet 
     parseFixtureLine(line, source),
   );
 
+  if (fixtures.length === 0) {
+    throw new Error(
+      `Invalid fixtures at ${source}: header present but no fixture lines found. ` +
+        `Add at least one fixture below the header line.`,
+    );
+  }
+
   return {
     specName: header.specName,
     specVersion: header.specVersion,

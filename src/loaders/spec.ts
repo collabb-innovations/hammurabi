@@ -3,7 +3,7 @@ import { dirname, isAbsolute, resolve as pathResolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import matter from "gray-matter";
 import { z } from "zod";
-import type { Spec, SpecTarget } from "../schema/spec.js";
+import type { Spec } from "../schema/spec.js";
 import { formatZodIssues } from "./errors.js";
 
 const SpecTargetSchema = z.discriminatedUnion("kind", [
@@ -38,6 +38,8 @@ export const SpecFrontmatterSchema = z
 
 export function parseSpec(content: string, source = "<inline>"): Spec {
   const parsedFile = matter(content);
+  assertQuotedScalar(parsedFile.data, "name", source);
+  assertQuotedScalar(parsedFile.data, "version", source);
   const result = SpecFrontmatterSchema.safeParse(parsedFile.data);
   if (!result.success) {
     throw new Error(
@@ -50,24 +52,54 @@ export function parseSpec(content: string, source = "<inline>"): Spec {
 export async function loadSpec(path: string): Promise<Spec> {
   const content = await readFile(path, "utf8");
   const spec = parseSpec(content, path);
-  return { ...spec, frontmatter: resolveTargetPaths(spec.frontmatter.target, path, spec.frontmatter) };
+  return { ...spec, frontmatter: applyTargetResolution(spec.frontmatter, path) };
 }
 
-function resolveTargetPaths(
-  target: SpecTarget,
-  specPath: string,
+function assertQuotedScalar(
+  data: unknown,
+  field: "name" | "version",
+  source: string,
+): void {
+  if (data === null || typeof data !== "object") return;
+  const value = (data as Record<string, unknown>)[field];
+  if (value === undefined) return;
+  if (typeof value === "string") return;
+  throw new Error(
+    `Invalid spec at ${source}: frontmatter.${field} must be a quoted string. ` +
+      `YAML parsed '${field}: ${String(value)}' as a ${typeof value}. ` +
+      `Quote the value: '${field}: "${String(value)}"'.`,
+  );
+}
+
+function applyTargetResolution(
   frontmatter: Spec["frontmatter"],
+  specPath: string,
 ): Spec["frontmatter"] {
+  const target = frontmatter.target;
   if (target.kind !== "function") return frontmatter;
-  if (isAbsolute(target.module) || /^[a-z]+:\/\//i.test(target.module)) {
-    return frontmatter;
+  const resolved = resolveTargetModule(specPath, target.module);
+  if (resolved === target.module) return frontmatter;
+  return {
+    ...frontmatter,
+    target: { ...target, module: resolved },
+  };
+}
+
+function resolveTargetModule(specPath: string, module: string): string {
+  if (isUrlScheme(module)) return module;
+  if (isAbsolute(module)) return pathToFileURL(module).href;
+  if (isPathLike(module)) {
+    return pathToFileURL(pathResolve(dirname(specPath), module)).href;
   }
-  if (target.module.startsWith(".")) {
-    const absolute = pathResolve(dirname(specPath), target.module);
-    return {
-      ...frontmatter,
-      target: { ...target, module: pathToFileURL(absolute).href },
-    };
-  }
-  return frontmatter;
+  return module;
+}
+
+function isUrlScheme(s: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:/i.test(s);
+}
+
+function isPathLike(s: string): boolean {
+  if (s.startsWith("./") || s.startsWith("../")) return true;
+  if (/\.(c|m)?[jt]sx?$/i.test(s)) return true;
+  return false;
 }
