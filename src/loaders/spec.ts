@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve as pathResolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import matter from "gray-matter";
-import { z } from "zod";
+import { z } from "zod/v4";
 import type { Spec } from "../schema/spec.js";
 import { formatZodIssues } from "./errors.js";
 
