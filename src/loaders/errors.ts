@@ -1,4 +1,4 @@
-import type { ZodIssue } from "zod";
+import type { ZodIssue } from "zod/v4";
 
 export function formatZodIssues(issues: ZodIssue[]): string {
   return issues

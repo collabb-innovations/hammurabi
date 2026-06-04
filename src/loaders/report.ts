@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { z } from "zod";
+import { z } from "zod/v4";
 import type { Report } from "../schema/report.js";
 import { CriterionSchema } from "./rubric.js";
 import { formatZodIssues } from "./errors.js";

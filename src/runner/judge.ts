@@ -1,4 +1,4 @@
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { zodOutputFormatV4 as zodOutputFormat } from "./zod-format.js";
 import type { Spec } from "../schema/spec.js";
 import type { Rubric } from "../schema/rubric.js";
 import type { Fixture } from "../schema/fixture.js";
@@ -31,7 +31,7 @@ async function judgeFixtureOne(args: JudgeOneArgs): Promise<JudgeOneScore[]> {
 
   const response = await client().messages.parse({
     model: judge.model,
-    max_tokens: 4096,
+    max_tokens: 16384,
     system: [
       { type: "text", text: SYS_JUDGE },
       {
