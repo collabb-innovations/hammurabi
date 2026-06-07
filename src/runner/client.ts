@@ -7,6 +7,10 @@ export function client(): Anthropic {
     const baseURL = process.env.AI_GATEWAY_URL;
     _client = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
+      // Eval gates must survive transient 429/500/503/overloaded responses —
+      // a single dropped judge call should not fabricate a CI-failing
+      // regression. The SDK retries these with exponential backoff.
+      maxRetries: 4,
       ...(baseURL ? { baseURL } : {}),
     });
   }

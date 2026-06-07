@@ -1,15 +1,15 @@
-import { zodOutputFormatV4 as zodOutputFormat } from "./zod-format.js";
 import type { Spec } from "../schema/spec.js";
-import type { Rubric } from "../schema/rubric.js";
+import type { Criterion } from "../schema/rubric.js";
 import type { Fixture } from "../schema/fixture.js";
 import type { CriterionScore, JudgeVote } from "../schema/report.js";
-import { client, SYS_JUDGE } from "./client.js";
-import { JudgeResponseSchema } from "./schema.js";
+import { SYS_JUDGE } from "./client.js";
+import { callJudge } from "./providers.js";
 import type { Aggregator, JudgeConfig } from "./types.js";
 
 interface JudgeOneArgs {
   spec: Spec;
-  rubric: Rubric;
+  criteria: Criterion[];
+  passThreshold: number;
   fixture: Fixture;
   output: unknown;
   judge: JudgeConfig;
@@ -19,57 +19,52 @@ interface JudgeOneScore {
   criterionId: string;
   score: number;
   reasoning: string;
+  /** True when the judge responded but never scored this criterion. */
+  omitted?: boolean;
+}
+
+/** One judge's full result for a fixture. `error` set ⇒ the whole judge failed. */
+export interface PanelJudgeResult {
+  model: string;
+  scores: JudgeOneScore[];
+  error?: string;
+}
+
+export interface AggregatedPanel {
+  scores: CriterionScore[];
+  /** Criterion ids no judge could score (every vote errored or was omitted). */
+  unscoreable: string[];
 }
 
 async function judgeFixtureOne(args: JudgeOneArgs): Promise<JudgeOneScore[]> {
-  const { spec, rubric, fixture, output, judge } = args;
+  const { spec, criteria, passThreshold, fixture, output, judge } = args;
 
   const specBlob = `# Spec\nname: ${spec.frontmatter.name}\nversion: ${spec.frontmatter.version}\ndescription: ${spec.frontmatter.description}\n\n${spec.body}`;
-  const rubricBlob = `# Rubric\npassThreshold: ${rubric.passThreshold}\ncriteria:\n${JSON.stringify(rubric.criteria, null, 2)}`;
+  const rubricBlob = formatRubricForJudge(criteria, passThreshold);
   const fixtureBlob = formatFixtureBlock(fixture);
   const outputBlob = formatOutputBlock(output);
 
-  const response = await client().messages.parse({
+  const { scores } = await callJudge({
+    provider: judge.provider ?? "anthropic",
     model: judge.model,
-    max_tokens: 16384,
-    system: [
-      { type: "text", text: SYS_JUDGE },
-      {
-        type: "text",
-        text: specBlob,
-        cache_control: { type: "ephemeral" },
-      },
-      {
-        type: "text",
-        text: rubricBlob,
-        cache_control: { type: "ephemeral" },
-      },
+    reasoning: judge.reasoning ?? "none",
+    systemBlocks: [
+      { text: SYS_JUDGE },
+      { text: specBlob, cache: true },
+      { text: rubricBlob, cache: true },
     ],
-    messages: [
-      {
-        role: "user",
-        content: `${fixtureBlob}\n\n${outputBlob}`,
-      },
-    ],
-    output_config: { format: zodOutputFormat(JudgeResponseSchema) },
+    userMessage: `${fixtureBlob}\n\n${outputBlob}`,
   });
 
-  if (!response.parsed_output) {
-    throw new Error(
-      `Judge ${judge.model} returned no parseable output for fixture ${fixture.id}`,
-    );
-  }
-
-  const returnedIds = new Set(
-    response.parsed_output.scores.map((s) => s.criterionId),
-  );
-  const completed: JudgeOneScore[] = [...response.parsed_output.scores];
-  for (const criterion of rubric.criteria) {
+  const returnedIds = new Set(scores.map((s) => s.criterionId));
+  const completed: JudgeOneScore[] = [...scores];
+  for (const criterion of criteria) {
     if (!returnedIds.has(criterion.id)) {
       completed.push({
         criterionId: criterion.id,
         score: 0,
-        reasoning: "judge omitted",
+        reasoning: "judge did not return a score for this criterion",
+        omitted: true,
       });
     }
   }
@@ -78,7 +73,9 @@ async function judgeFixtureOne(args: JudgeOneArgs): Promise<JudgeOneScore[]> {
 
 interface JudgePanelArgs {
   spec: Spec;
-  rubric: Rubric;
+  /** The criteria to judge (the LLM-scored subset). */
+  criteria: Criterion[];
+  passThreshold: number;
   fixture: Fixture;
   output: unknown;
   judges: JudgeConfig[];
@@ -87,50 +84,72 @@ interface JudgePanelArgs {
 
 export async function judgeFixturePanel(
   args: JudgePanelArgs,
-): Promise<CriterionScore[]> {
-  const { spec, rubric, fixture, output, judges, aggregator } = args;
+): Promise<AggregatedPanel> {
+  const { spec, criteria, passThreshold, fixture, output, judges, aggregator } =
+    args;
 
-  const perJudgeResults = await Promise.all(
-    judges.map(async (judge) => {
+  const perJudge: PanelJudgeResult[] = await Promise.all(
+    judges.map(async (judge): Promise<PanelJudgeResult> => {
       try {
         const scores = await judgeFixtureOne({
           spec,
-          rubric,
+          criteria,
+          passThreshold,
           fixture,
           output,
           judge,
         });
-        return { judge, scores, error: undefined as string | undefined };
+        return { model: judge.model, scores };
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
-        return {
-          judge,
-          scores: rubric.criteria.map((c) => ({
-            criterionId: c.id,
-            score: 0,
-            reasoning: `judge errored: ${message}`,
-          })),
-          error: message,
-        };
+        return { model: judge.model, scores: [], error: message };
       }
     }),
   );
 
-  return rubric.criteria.map((criterion): CriterionScore => {
-    const votes: JudgeVote[] = perJudgeResults.map((res) => {
-      const found = res.scores.find((s) => s.criterionId === criterion.id);
+  return aggregateCriterionScores(criteria, perJudge, aggregator);
+}
+
+/**
+ * Pure aggregation: fold a panel's per-judge scores into one CriterionScore
+ * per criterion. Errored judges and omitted criteria are recorded in the audit
+ * trail (`judgeVotes[].error`) but EXCLUDED from the aggregate — a transient
+ * judge failure must never fabricate a low score and a false regression.
+ * A criterion that NO judge could score lands in `unscoreable` so the caller
+ * can mark the fixture errored rather than silently scoring it 0.
+ */
+export function aggregateCriterionScores(
+  criteria: Criterion[],
+  perJudge: PanelJudgeResult[],
+  aggregator: Aggregator,
+): AggregatedPanel {
+  const unscoreable: string[] = [];
+
+  const scores = criteria.map((criterion): CriterionScore => {
+    const votes: JudgeVote[] = perJudge.map((j) => {
+      const found = j.scores.find((s) => s.criterionId === criterion.id);
+      const error = voteError(j, found);
       return {
-        model: res.judge.model,
+        model: j.model,
         score: found?.score ?? 0,
-        reasoning: found?.reasoning ?? "judge omitted",
-        ...(res.error ? { error: res.error } : {}),
+        reasoning:
+          found?.reasoning ??
+          (j.error
+            ? `judge errored: ${j.error}`
+            : "judge did not return a score for this criterion"),
+        ...(error ? { error } : {}),
       };
     });
 
-    const aggregated = applyAggregator(
-      aggregator,
-      votes.map((v) => v.score),
-    );
+    const validScores = votes.filter((v) => !v.error).map((v) => v.score);
+    let aggregated: number;
+    if (validScores.length === 0) {
+      unscoreable.push(criterion.id);
+      aggregated = 0;
+    } else {
+      aggregated = applyAggregator(aggregator, validScores);
+    }
+
     const reasoning = votes
       .map((v) => `[${v.model}] ${v.reasoning}`)
       .join("\n\n");
@@ -142,9 +161,21 @@ export async function judgeFixturePanel(
       judgeVotes: votes,
     };
   });
+
+  return { scores, unscoreable };
 }
 
-function applyAggregator(agg: Aggregator, scores: number[]): number {
+function voteError(
+  judge: PanelJudgeResult,
+  found: JudgeOneScore | undefined,
+): string | undefined {
+  if (judge.error) return judge.error;
+  if (!found) return "judge returned no score for this criterion";
+  if (found.omitted) return "judge did not return a score for this criterion";
+  return undefined;
+}
+
+export function applyAggregator(agg: Aggregator, scores: number[]): number {
   if (scores.length === 0) return 0;
   if (typeof agg === "function") return agg(scores);
   switch (agg) {
@@ -161,6 +192,37 @@ function applyAggregator(agg: Aggregator, scores: number[]): number {
       return Math.min(...scores);
     case "max":
       return Math.max(...scores);
+  }
+}
+
+function formatRubricForJudge(
+  criteria: Criterion[],
+  passThreshold: number,
+): string {
+  const lines = [
+    `# Rubric — score EVERY criterion below, keyed by its id`,
+    `passThreshold: ${passThreshold}`,
+    "",
+  ];
+  for (const c of criteria) {
+    lines.push(`## ${c.id} — ${c.name}`);
+    if (c.description) lines.push(c.description);
+    lines.push(`Scale: ${describeScale(c)}`);
+    lines.push(`Weight: ${c.weight.toFixed(2)}`);
+    if (c.judgePrompt) lines.push(`Judge guidance: ${c.judgePrompt}`);
+    lines.push("");
+  }
+  return lines.join("\n").trimEnd();
+}
+
+function describeScale(criterion: Criterion): string {
+  switch (criterion.scale.kind) {
+    case "pass-fail":
+      return "pass/fail — return 1 for pass, 0 for fail.";
+    case "ordinal": {
+      const { min, max } = criterion.scale;
+      return `ordinal — return a number from ${min} to ${max} (higher is better).`;
+    }
   }
 }
 
