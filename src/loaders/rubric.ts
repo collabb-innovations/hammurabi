@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { z } from "zod/v4";
 import type { Rubric } from "../schema/rubric.js";
 import { formatZodIssues } from "./errors.js";
+import { resolveModuleSpecifier } from "./resolve-module.js";
 
 const CriterionScaleSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("pass-fail") }).strict(),
@@ -14,6 +15,17 @@ const CriterionScaleSchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 
+const CriterionEvaluatorSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("llm") }).strict(),
+  z
+    .object({
+      kind: z.literal("code"),
+      module: z.string().min(1),
+      export: z.string().min(1),
+    })
+    .strict(),
+]);
+
 export const CriterionSchema = z
   .object({
     id: z.string().min(1),
@@ -22,6 +34,7 @@ export const CriterionSchema = z
     weight: z.number().min(0).max(1),
     scale: CriterionScaleSchema,
     judgePrompt: z.string().optional(),
+    evaluator: CriterionEvaluatorSchema.optional(),
   })
   .strict();
 
@@ -68,5 +81,19 @@ export function parseRubric(content: string, source = "<inline>"): Rubric {
 
 export async function loadRubric(path: string): Promise<Rubric> {
   const content = await readFile(path, "utf8");
-  return parseRubric(content, path);
+  const rubric = parseRubric(content, path);
+  return applyEvaluatorResolution(rubric, path);
+}
+
+/** Resolve code-evaluator module specifiers relative to the rubric file. */
+function applyEvaluatorResolution(rubric: Rubric, rubricPath: string): Rubric {
+  let changed = false;
+  const criteria = rubric.criteria.map((c) => {
+    if (c.evaluator?.kind !== "code") return c;
+    const resolved = resolveModuleSpecifier(rubricPath, c.evaluator.module);
+    if (resolved === c.evaluator.module) return c;
+    changed = true;
+    return { ...c, evaluator: { ...c.evaluator, module: resolved } };
+  });
+  return changed ? { ...rubric, criteria } : rubric;
 }
