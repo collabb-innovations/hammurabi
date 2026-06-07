@@ -1,12 +1,36 @@
 {
-  "name": "hammurabi",
-  "version": "0.0.4",
+  "name": "@collabb/hammurabi",
+  "version": "0.1.0",
   "description": "Spec → rubric → fixtures → runner. Trust your outputs without re-reading every diff.",
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/collabb-innovations/hammurabi.git"
+  },
+  "homepage": "https://hammurabi.collabb.ai",
+  "bugs": {
+    "url": "https://github.com/collabb-innovations/hammurabi/issues"
+  },
+  "license": "MIT",
+  "keywords": [
+    "llm",
+    "eval",
+    "evaluation",
+    "rubric",
+    "judge",
+    "anthropic",
+    "claude",
+    "ai",
+    "testing"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "hammurabi-run": "./dist/cli/run.js"
+    "hammurabi-run": "./dist/cli/run.js",
+    "hammurabi-check": "./dist/cli/check.js"
   },
   "exports": {
     ".": {
@@ -33,12 +57,14 @@
   "files": [
     "dist/",
     "commands/",
+    "templates/",
+    "CHANGELOG.md",
     "README.md"
   ],
   "scripts": {
     "build": "tsc",
-    "postbuild": "chmod +x dist/cli/run.js",
-    "prepare": "npm run build",
+    "postbuild": "chmod +x dist/cli/run.js dist/cli/check.js",
+    "prepack": "npm run build",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "smoke": "tsx examples/smoke/run.ts",
@@ -46,7 +72,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.0",
+    "@google/genai": "^1.40.0",
     "gray-matter": "^4.0.3",
+    "openai": "^4.104.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {

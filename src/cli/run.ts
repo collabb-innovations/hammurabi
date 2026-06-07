@@ -1,11 +1,14 @@
 #!/usr/bin/env node
+import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { loadBundle, loadReport } from "../loaders/index.js";
+import type { Bundle } from "../loaders/index.js";
 import { run } from "../runner/index.js";
 import type { Aggregator, JudgeConfig } from "../runner/types.js";
 import type { Report } from "../schema/report.js";
+import { baselinePathFor } from "./baseline.js";
 import { renderReportMarkdown } from "./report-md.js";
 
 const HELP = `Usage: hammurabi-run <spec-path> [options]
@@ -15,9 +18,14 @@ Options:
                                 (default: claude-haiku-4-5)
   --aggregator <mode>           mean | median | min | max (default: mean)
   --baseline <path>             Path to prior report.json for regression check
+                                (default: auto-discover <base>.baseline.report.json)
+  --no-baseline                 Skip auto-discovery of a sibling baseline
+  --update-baseline             Write this run as the committed baseline and exit 0
   --regression-threshold <n>    Per-fixture delta threshold (default: 0.05)
   --out <dir>                   Output directory (default: alongside spec)
   --format <fmt>                json | md | both (default: both)
+  --filter <ids>                Comma-separated fixture ids to run (subset)
+  --limit <n>                   Run only the first N fixtures
   --quiet                       Suppress stdout summary
   --help                        Show this help
 
@@ -38,23 +46,32 @@ interface ParsedFlags {
   regressionThreshold: number | undefined;
   outDir: string;
   format: (typeof ALLOWED_FORMATS)[number];
+  filter: string[] | undefined;
+  limit: number | undefined;
+  updateBaseline: boolean;
   quiet: boolean;
 }
 
 async function main(): Promise<void> {
   const flags = await parseFlags();
 
-  let bundle;
+  let bundle: Bundle;
   try {
     bundle = await loadBundle(flags.specPath);
   } catch (e) {
     die(`could not load bundle: ${(e as Error).message}`);
   }
 
+  if (flags.updateBaseline && (flags.filter || flags.limit !== undefined)) {
+    die("--update-baseline cannot be combined with --filter/--limit (it would bless a partial suite)");
+  }
+
+  bundle = { ...bundle!, fixtures: applyFixtureFilter(bundle!.fixtures, flags) };
+
   let report: Report;
   try {
     report = await run({
-      ...bundle!,
+      ...bundle,
       judges: flags.judges,
       aggregator: flags.aggregator,
       baseline: flags.baseline,
@@ -68,6 +85,15 @@ async function main(): Promise<void> {
 
   if (!flags.quiet) {
     process.stdout.write(formatCliSummary(report!, flags, paths));
+  }
+
+  if (flags.updateBaseline) {
+    const blessPath = baselinePathFor(flags.specPath);
+    await writeFile(blessPath, JSON.stringify(report!, null, 2));
+    if (!flags.quiet) {
+      process.stdout.write(`  baseline updated: ${blessPath}\n`);
+    }
+    process.exit(0);
   }
 
   const hasFailure =
@@ -88,6 +114,10 @@ async function parseFlags(): Promise<ParsedFlags> {
         "regression-threshold": { type: "string" },
         out: { type: "string" },
         format: { type: "string", default: "both" },
+        filter: { type: "string" },
+        limit: { type: "string" },
+        "no-baseline": { type: "boolean", default: false },
+        "update-baseline": { type: "boolean", default: false },
         quiet: { type: "boolean", default: false },
         help: { type: "boolean", default: false },
       },
@@ -143,6 +173,16 @@ async function parseFlags(): Promise<ParsedFlags> {
     } catch (e) {
       die((e as Error).message);
     }
+  } else if (!values["no-baseline"] && !values["update-baseline"]) {
+    // Auto-discover a committed sibling baseline for regression detection.
+    const auto = baselinePathFor(specPath);
+    if (existsSync(auto)) {
+      try {
+        baseline = await loadReport(auto);
+      } catch (e) {
+        die(`auto-discovered baseline ${auto} is invalid: ${(e as Error).message}`);
+      }
+    }
   }
 
   const format = (values.format ?? "both") as string;
@@ -152,6 +192,21 @@ async function parseFlags(): Promise<ParsedFlags> {
 
   const outDir = values.out ? resolve(values.out) : dirname(specPath);
 
+  const filter = values.filter
+    ? values.filter
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : undefined;
+
+  let limit: number | undefined;
+  if (values.limit !== undefined) {
+    limit = Number(values.limit);
+    if (!Number.isInteger(limit) || limit < 1) {
+      die(`--limit must be a positive integer (got ${values.limit})`);
+    }
+  }
+
   return {
     specPath,
     judges,
@@ -160,8 +215,29 @@ async function parseFlags(): Promise<ParsedFlags> {
     regressionThreshold,
     outDir,
     format: format as ParsedFlags["format"],
+    filter,
+    limit,
+    updateBaseline: Boolean(values["update-baseline"]),
     quiet: Boolean(values.quiet),
   };
+}
+
+function applyFixtureFilter(
+  fixtures: Bundle["fixtures"],
+  flags: ParsedFlags,
+): Bundle["fixtures"] {
+  let selected = fixtures.fixtures;
+  if (flags.filter) {
+    const wanted = new Set(flags.filter);
+    selected = selected.filter((f) => wanted.has(f.id));
+  }
+  if (flags.limit !== undefined) {
+    selected = selected.slice(0, flags.limit);
+  }
+  if (selected.length === 0) {
+    die("no fixtures matched --filter/--limit");
+  }
+  return { ...fixtures, fixtures: selected };
 }
 
 async function writeReports(

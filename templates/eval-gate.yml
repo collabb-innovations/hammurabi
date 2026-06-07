@@ -1,0 +1,37 @@
+# Hammurabi eval gate — copy to .github/workflows/eval-gate.yml in your repo.
+#
+# Runs every *.spec.md bundle under evals/ against its committed baseline on
+# any PR that touches them. Each bundle's judge panel comes from its own spec
+# `eval` block. Fails the PR on any fixture failure or regression.
+#
+# Add ANTHROPIC_API_KEY (and OPENAI_API_KEY / GEMINI_API_KEY if your panels use
+# them) as repository secrets.
+name: eval-gate
+on:
+  pull_request:
+    paths:
+      - "evals/**"
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install -g @collabb/hammurabi
+      - name: Run eval bundles
+        run: hammurabi-check evals/
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      - name: Upload eval reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-reports
+          path: |
+            check-report.json
+            evals/**/*.report.md

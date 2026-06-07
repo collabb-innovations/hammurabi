@@ -1,8 +1,10 @@
-# hammurabi
+# Hammurabi
 
-Spec → rubric → fixtures → runner. A small, opinionated framework for authoring evaluations you'll actually trust.
+> Spec → rubric → fixtures → runner. A small, opinionated framework for authoring LLM evaluations you'll actually trust.
 
-**Status:** alpha. v0.0.1 runner implemented, no on-disk loaders yet (callers construct Spec/Rubric/FixtureSet objects in code).
+[![npm](https://img.shields.io/npm/v/@collabb/hammurabi.svg)](https://www.npmjs.com/package/@collabb/hammurabi)
+
+**Status:** alpha (v0.1.0). On-disk loaders, CLI runner, a **multi-provider** judge panel (Anthropic + OpenAI + Google) **configured in the spec frontmatter**, **deterministic code-scored criteria**, baseline regression detection, and a repo-wide `hammurabi-check` CI command are all shipped. Schemas use Zod v4.
 
 ## Why
 
@@ -10,39 +12,59 @@ Teams ship faster when they can trust outputs without re-reading every diff. Ham
 
 ## Install
 
-Git-installed for now (no npm registry yet):
-
 ```sh
-npm install github:mustermania/collabb#hammurabi-v0.0.1 --workspace=hammurabi
+npm install @collabb/hammurabi
 ```
 
-Once stable, this will publish to npm.
+Or run the CLI directly without installing:
+
+```sh
+npx @collabb/hammurabi hammurabi-run path/to/foo.spec.md
+```
 
 ## CLI
 
-Hammurabi ships a `hammurabi-run` bin (available after install via npm bin):
+Hammurabi ships two bins (available after install via npm bin).
+
+**`hammurabi-run`** — one bundle:
 
 ```sh
 hammurabi-run path/to/foo.spec.md \
-  --judges claude-haiku-4-5,claude-sonnet-4-6 \
   --aggregator min \
-  --baseline path/to/baseline.report.json
+  --filter foo-001,foo-007 \
+  --update-baseline
 ```
 
-Writes `foo.report.json` and `foo.report.md` alongside the spec (or in `--out <dir>`). Exit codes are CI-meaningful:
+The judge panel resolves from the spec's `eval` block (see below); CLI flags
+override it. A sibling `foo.baseline.report.json` is auto-discovered for
+regression detection (`--no-baseline` to skip, `--update-baseline` to bless a
+new one). Writes `foo.report.json` and `foo.report.md` alongside the spec (or in
+`--out <dir>`).
+
+**`hammurabi-check`** — every bundle under a directory (the CI entry point):
+
+```sh
+hammurabi-check evals/
+```
+
+Discovers each `*.spec.md`, runs it against its committed baseline, and
+aggregates into one `check-report.json` + a combined exit code.
+
+Exit codes (both bins) are CI-meaningful:
 
 - `0` — all fixtures passed, no regressions
 - `1` — any failure or regression
 - `2` — could not run (bad args, malformed bundle, runner error)
 
-Run `hammurabi-run --help` for the full flag list.
+Run `hammurabi-run --help` / `hammurabi-check --help` for the full flag list. A
+drop-in GitHub Action template lives at `templates/eval-gate.yml`.
 
 ## Slash commands
 
 Copy them into any project's `.claude/commands/`:
 
 ```sh
-cp node_modules/hammurabi/commands/*.md .claude/commands/
+cp node_modules/@collabb/hammurabi/commands/*.md .claude/commands/
 ```
 
 - `/hammurabi <path-to-spec.md>` — 4-step authoring flow: refine spec via Q&A → generate rubric → generate fixtures
@@ -61,20 +83,82 @@ Three artifact types, all language-neutral on disk:
 Reports are JSON: `Report` type.
 
 ```ts
-import type { Spec, Rubric, FixtureSet, Report } from "hammurabi/schema";
-import { run } from "hammurabi/runner";
+import type { Spec, Rubric, FixtureSet, Report } from "@collabb/hammurabi/schema";
+import { run } from "@collabb/hammurabi/runner";
 ```
+
+## The `eval` block — judge panel in the spec frontmatter
+
+How rigorously a spec is judged — the **size and reasoning of the panel** —
+lives in the spec's frontmatter `eval` block, so it's version-controlled and
+reviewable rather than an ephemeral CLI flag:
+
+```yaml
+---
+name: trade-sizer
+version: "1.0.0"
+description: ...
+target: { kind: http, url: https://... }
+eval:
+  riskTier: critical          # shorthand → a default cross-provider panel
+  aggregator: min             # any single judge flagging a problem fails it
+  generatorProvider: anthropic # warns if a judge shares this provider
+  judges:                     # ...or spell the panel out explicitly
+    - { provider: anthropic, model: claude-opus-4-8,   role: primary,    reasoning: high }
+    - { provider: openai,    model: gpt-4o,            role: secondary,  reasoning: none }
+    - { provider: google,    model: gemini-2.5-pro,    role: tiebreaker, reasoning: medium }
+---
+```
+
+- **`riskTier`** (`low` | `medium` | `high` | `critical`) expands to a default
+  panel via `RISK_TIER_PRESETS` — higher tier means more judges, more providers,
+  more reasoning, more conservative aggregation. Override any of it with explicit
+  `judges` / `aggregator`.
+- **`reasoning`** (`none` | `low` | `medium` | `high` | a token budget) maps to
+  each provider's mechanism: Anthropic extended thinking, OpenAI
+  `reasoning_effort`, Gemini thinking budget.
+- **Cross-provider bias mitigation** — no judge should share the output's
+  provider (same-family models rate their own style leniently). Set
+  `generatorProvider` and the runner warns when a judge collides with it.
+
+Resolution precedence: CLI/`RunOptions` override **>** `eval.judges` **>**
+`eval.riskTier` preset **>** a single default Haiku judge.
+
+Set the provider keys you use: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+`GEMINI_API_KEY` (`AI_GATEWAY_URL` / `OPENAI_BASE_URL` route through a gateway).
+
+## Deterministic (code-scored) criteria
+
+Reserve the judge panel for judgment calls; let code check what code can check
+exactly (recall, presence, format, latency). A criterion with a `code`
+evaluator is scored by importing a function — no judge call, perfectly
+reproducible:
+
+```json
+{
+  "id": "semantic-recall",
+  "name": "Semantic recall",
+  "description": "Fraction of must-include elements present in the top-N.",
+  "weight": 0.35,
+  "scale": { "kind": "ordinal", "min": 0, "max": 1 },
+  "evaluator": { "kind": "code", "module": "./evaluators.ts", "export": "semanticRecall" }
+}
+```
+
+The export receives `{ input, expected, output, fixture }` and returns a number
+or `{ score, reasoning }` in the criterion's scale. LLM and code criteria mix
+freely in one rubric; a rubric with no LLM criteria makes zero API calls.
 
 ## Runner
 
 ```ts
-import { run } from "hammurabi";
+import { run } from "@collabb/hammurabi";
 
 const report = await run({
-  spec,
+  spec,      // panel comes from spec.frontmatter.eval unless overridden here
   rubric,
   fixtures,
-  judges: [{ model: "claude-haiku-4-5" }, { model: "claude-sonnet-4-6" }],
+  judges: [{ provider: "anthropic", model: "claude-haiku-4-5" }], // optional override
   aggregator: "min",
   baseline: previousReport,
 });
@@ -82,11 +166,11 @@ const report = await run({
 
 ### Judge panel
 
-The runner judges each fixture's output with a **configurable panel of LLMs**. Default is a single Haiku 4.5 judge. Teams running risk-sensitive workloads (trading strategies, backtests, anything touching real money) should grow the panel and mix model families to match their risk tolerance.
+The runner judges each fixture's output with a **configurable panel of LLMs**, normally authored in the spec's [`eval` block](#the-eval-block--judge-panel-in-the-spec-frontmatter). These `RunOptions` override it for a one-off run. Default (no eval block, no override) is a single Haiku 4.5 judge.
 
 | Option | Default | Notes |
 |---|---|---|
-| `judges` | `[{ model: "claude-haiku-4-5" }]` | Array of judge configs. Panel calls run in parallel per fixture. |
+| `judges` | from `eval` block, else `[{ provider: "anthropic", model: "claude-haiku-4-5" }]` | Array of judge configs (`provider`, `model`, `role`, `reasoning`, `weight`). Panel calls run in parallel per fixture. |
 | `aggregator` | `"mean"` | `"mean" \| "median" \| "min" \| "max"` or a custom `(scores: number[]) => number`. Risk-sensitive callers should use `"min"`. |
 | `regressionThreshold` | `0.05` | Per-fixture weighted-score delta below which a regression is flagged vs the baseline. |
 | `execute` | — | Required for `target.kind === "free-form"`. Custom executor that returns the output for a given input. |
@@ -109,7 +193,11 @@ Each `CriterionScore` in the report preserves the full panel's votes:
 }
 ```
 
-If a judge errors, its synthetic vote (`score: 0`, `reasoning: "judge errored: ..."`) still lands in `judgeVotes` so the run continues and the cause is auditable.
+If a judge errors or omits a criterion, its vote still lands in `judgeVotes`
+with an `error` field — but it is **excluded from the aggregate**, so a
+transient failure can never fabricate a low score and a false regression. A
+criterion that *no* judge could score marks the fixture errored (⚠), never
+failed (✗), and still trips a non-zero CI exit so it can't pass silently.
 
 ## Target kinds
 
