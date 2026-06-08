@@ -73,6 +73,33 @@ test("parseRubric rejects malformed JSON", () => {
   assert.throws(() => parseRubric("{ not json"), /Invalid rubric JSON/);
 });
 
+test("parseRubric accepts a code-scored criterion evaluator", () => {
+  const withCode = {
+    ...valid,
+    criteria: [
+      {
+        ...valid.criteria[0],
+        evaluator: { kind: "code", module: "./evaluators.ts", export: "recall" },
+      },
+    ],
+  };
+  const r = parseRubric(JSON.stringify(withCode));
+  assert.equal(r.criteria[0].evaluator?.kind, "code");
+});
+
+test("parseRubric rejects a code evaluator missing its export", () => {
+  const bad = {
+    ...valid,
+    criteria: [
+      {
+        ...valid.criteria[0],
+        evaluator: { kind: "code", module: "./evaluators.ts" },
+      },
+    ],
+  };
+  assert.throws(() => parseRubric(JSON.stringify(bad)), /export/);
+});
+
 test("parseRubric warns (does not throw) when weights drift from 1.0", () => {
   const drifted = {
     ...valid,

@@ -57,6 +57,8 @@ const ReportSummarySchema = z
 const JudgeConfigSchema = z
   .object({
     model: z.string().min(1),
+    provider: z.string().min(1).optional(),
+    role: z.string().min(1).optional(),
   })
   .strict();
 

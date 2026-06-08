@@ -1,10 +1,9 @@
 import { readFile } from "node:fs/promises";
-import { dirname, isAbsolute, resolve as pathResolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import matter from "gray-matter";
 import { z } from "zod/v4";
 import type { Spec } from "../schema/spec.js";
 import { formatZodIssues } from "./errors.js";
+import { resolveModuleSpecifier } from "./resolve-module.js";
 
 const SpecTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("cli"), command: z.string().min(1) }).strict(),
@@ -27,12 +26,40 @@ const SpecTargetSchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 
+const JudgeProviderSchema = z.enum(["anthropic", "google", "openai"]);
+
+const ReasoningEffortSchema = z.union([
+  z.enum(["none", "low", "medium", "high"]),
+  z.number().int().nonnegative(),
+]);
+
+const JudgePanelMemberSchema = z
+  .object({
+    provider: JudgeProviderSchema,
+    model: z.string().min(1),
+    role: z.string().min(1).optional(),
+    reasoning: ReasoningEffortSchema.optional(),
+    weight: z.number().positive().optional(),
+  })
+  .strict();
+
+const EvalConfigSchema = z
+  .object({
+    riskTier: z.enum(["low", "medium", "high", "critical"]).optional(),
+    judges: z.array(JudgePanelMemberSchema).min(1).optional(),
+    aggregator: z.enum(["mean", "median", "min", "max"]).optional(),
+    regressionThreshold: z.number().min(0).max(1).optional(),
+    generatorProvider: JudgeProviderSchema.optional(),
+  })
+  .strict();
+
 export const SpecFrontmatterSchema = z
   .object({
     name: z.string().min(1),
     version: z.string().min(1),
     description: z.string(),
     target: SpecTargetSchema,
+    eval: EvalConfigSchema.optional(),
   })
   .strict();
 
@@ -77,29 +104,10 @@ function applyTargetResolution(
 ): Spec["frontmatter"] {
   const target = frontmatter.target;
   if (target.kind !== "function") return frontmatter;
-  const resolved = resolveTargetModule(specPath, target.module);
+  const resolved = resolveModuleSpecifier(specPath, target.module);
   if (resolved === target.module) return frontmatter;
   return {
     ...frontmatter,
     target: { ...target, module: resolved },
   };
-}
-
-function resolveTargetModule(specPath: string, module: string): string {
-  if (isUrlScheme(module)) return module;
-  if (isAbsolute(module)) return pathToFileURL(module).href;
-  if (isPathLike(module)) {
-    return pathToFileURL(pathResolve(dirname(specPath), module)).href;
-  }
-  return module;
-}
-
-function isUrlScheme(s: string): boolean {
-  return /^[a-z][a-z0-9+.-]*:/i.test(s);
-}
-
-function isPathLike(s: string): boolean {
-  if (s.startsWith("./") || s.startsWith("../")) return true;
-  if (/\.(c|m)?[jt]sx?$/i.test(s)) return true;
-  return false;
 }

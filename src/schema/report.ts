@@ -30,7 +30,7 @@ export interface Report {
   finishedAt: string;
   specName: string;
   specVersion: string;
-  judges: { model: string }[];
+  judges: { model: string; provider?: string; role?: string }[];
   aggregator: string;
   criteria: Criterion[];
   results: FixtureResult[];

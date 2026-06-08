@@ -224,6 +224,88 @@ target:
   }
 });
 
+test("parseSpec accepts an eval block with an explicit judge panel", () => {
+  const content = `---
+name: foo
+version: "1.0.0"
+description: x
+target:
+  kind: free-form
+  description: x
+eval:
+  riskTier: high
+  aggregator: min
+  regressionThreshold: 0.03
+  generatorProvider: openai
+  judges:
+    - provider: anthropic
+      model: claude-sonnet-4-6
+      role: primary
+      reasoning: medium
+    - provider: google
+      model: gemini-2.5-flash
+      role: secondary
+      reasoning: 2048
+      weight: 0.5
+---
+`;
+  const spec = parseSpec(content);
+  assert.equal(spec.frontmatter.eval?.riskTier, "high");
+  assert.equal(spec.frontmatter.eval?.aggregator, "min");
+  assert.equal(spec.frontmatter.eval?.judges?.length, 2);
+  assert.equal(spec.frontmatter.eval?.judges?.[1].reasoning, 2048);
+});
+
+test("parseSpec accepts an eval block that is just a risk tier", () => {
+  const content = `---
+name: foo
+version: "1.0.0"
+description: x
+target:
+  kind: free-form
+  description: x
+eval:
+  riskTier: low
+---
+`;
+  const spec = parseSpec(content);
+  assert.equal(spec.frontmatter.eval?.riskTier, "low");
+  assert.equal(spec.frontmatter.eval?.judges, undefined);
+});
+
+test("parseSpec rejects an unknown judge provider", () => {
+  const content = `---
+name: foo
+version: "1.0.0"
+description: x
+target:
+  kind: free-form
+  description: x
+eval:
+  judges:
+    - provider: cohere
+      model: command-r
+---
+`;
+  assert.throws(() => parseSpec(content), /provider/);
+});
+
+test("parseSpec rejects unknown fields inside the eval block (strict)", () => {
+  const content = `---
+name: foo
+version: "1.0.0"
+description: x
+target:
+  kind: free-form
+  description: x
+eval:
+  riskTier: low
+  bogus: nope
+---
+`;
+  assert.throws(() => parseSpec(content), /bogus/);
+});
+
 test("loadSpec converts absolute POSIX path to file:// URL", async () => {
   const dir = await mkdtemp(join(tmpdir(), "hammurabi-spec-"));
   const specPath = join(dir, "foo.spec.md");
