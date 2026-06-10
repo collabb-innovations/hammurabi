@@ -13,6 +13,18 @@ If no argument is provided, ask the user for a path to a markdown spec (or offer
 
 Read the target file. Confirm it has frontmatter with at minimum `name`, `version`, `description`, `target`. If frontmatter is missing or malformed, propose a corrected version and confirm before continuing.
 
+## Step 1.5: Bundle hygiene checklist
+
+Before writing the rubric, confirm three things with the user (one batched `AskUserQuestion` round). These are the dominant authoring footguns — the patterns that produce a green gate over non-conformant output.
+
+1. **Does the target produce output against a documented contract** (JSON schema, TS type, OpenAPI spec, function signature)? If yes, locate it. The code-scored criteria in Step 3 will **import** that contract directly — we do not re-encode it in the evaluator. A hand-copied key list drifts the first time the target changes and the gate silently rots.
+
+2. **Will this eval mirror a production validator?** If yes, capture the library + major version + config used in production (e.g. `ajv 8`, `formats: true`, `strict: false`). The evaluator must match. An ajv 8 evaluator gated against ajv 6 production code is not the same gate.
+
+3. **Will the rubric use external npm deps in code-scored criteria?** If yes, the bundle directory must contain a `package.json` with those deps declared. Relying on "the parent project happens to hoist it" breaks the documented `hammurabi-check evals/` use case the moment the bundle runs in a CI workspace or fresh checkout. Hammurabi's preflight (since 0.1.1) catches missing imports loudly, but the root cause is the missing `package.json`.
+
+If any answer reveals a gap, fix it before continuing. See [`docs/authoring-guide.md`](../docs/authoring-guide.md) for the long-form walkthrough.
+
 ## Step 2: Push back via Q&A
 
 Identify the weakest points in the spec — vague success criteria, missing edge cases, unclear target, scope ambiguity, conflicting requirements. Surface them as a single `AskUserQuestion` round (3–4 questions max, batched). Don't enumerate trivial nits; pick the gaps that would let bad output sneak past evaluation.

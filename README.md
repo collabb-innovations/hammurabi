@@ -50,11 +50,21 @@ hammurabi-check evals/
 Discovers each `*.spec.md`, runs it against its committed baseline, and
 aggregates into one `check-report.json` + a combined exit code.
 
-Exit codes (both bins) are CI-meaningful:
+Exit codes (both bins) are CI-meaningful and **baseline-aware** (since 0.1.1):
 
-- `0` — all fixtures passed, no regressions
-- `1` — any failure or regression
-- `2` — could not run (bad args, malformed bundle, runner error)
+- `0` — no NEW failures (vs baseline) and no regressions
+- `1` — any new failure (fixture passed in baseline, fails now) or regression
+- `2` — could not run (bad args, malformed bundle, runner error, unresolved import)
+
+A fixture failing identically in the committed baseline surfaces as a
+`known-fail (baselined)` warning and does NOT break the gate — bundles with
+an honest baseline that isn't 100% green can still sit in CI. A baselined
+fixture that now passes surfaces as an `improvement` prompt to re-bless via
+`--update-baseline`.
+
+Before scoring, both bins **preflight every dynamic import** the bundle uses
+(function-target modules + code-evaluator modules). Unresolvable deps exit 2
+with a precise message naming the criterion or target. Skip with `--no-preflight`.
 
 Run `hammurabi-run --help` / `hammurabi-check --help` for the full flag list. A
 drop-in GitHub Action template lives at `templates/eval-gate.yml`.
@@ -86,6 +96,37 @@ Reports are JSON: `Report` type.
 import type { Spec, Rubric, FixtureSet, Report } from "@collabb/hammurabi/schema";
 import { run } from "@collabb/hammurabi/runner";
 ```
+
+## Authoring guidance
+
+Three patterns that consistently bite first-time bundle authors. Adopt them
+before you author the rubric. See [`docs/authoring-guide.md`](./docs/authoring-guide.md)
+for the long-form walkthrough.
+
+### Import the contract — never re-encode it
+
+If your target produces output conforming to a schema, JSON spec, or function
+signature, **your evaluator should import the same definition the target uses**.
+Hand-copying the key list, type shape, or validation rules into the evaluator
+guarantees drift the first time the target changes. Common form of the bug:
+a `requiredKeys` array drifts out of sync with the source `*.schema.json`, the
+gate silently rots, and the rubric reports green for non-conformant output.
+
+### Mirror your production validator's library and config
+
+If the eval mirrors a production validator (`ajv`, `zod`, `joi`, …), pin the
+**same major version** the production code uses and apply the **same config**
+(`formats`, `coerceTypes`, `strict`, …). An ajv 8 evaluator gated against
+ajv 6 production code is not the same gate.
+
+### Bundles using external deps must be installed packages
+
+A bundle directory that imports `npm` packages must contain a `package.json`
+with the deps declared. Relying on "the parent project happens to hoist it"
+breaks the documented `hammurabi-check evals/` use case the moment the bundle
+runs in a CI workspace or fresh checkout. Since 0.1.1, both CLI bins preflight
+every dynamic import before scoring and emit a precise error pointing at the
+offending criterion or target — the root-cause fix is still a declared dep.
 
 ## The `eval` block — judge panel in the spec frontmatter
 

@@ -58,6 +58,7 @@
     "dist/",
     "commands/",
     "templates/",
+    "docs/",
     "CHANGELOG.md",
     "README.md"
   ],
