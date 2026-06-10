@@ -6,6 +6,7 @@ import { parseArgs } from "node:util";
 import { loadBundle, loadReport } from "../loaders/index.js";
 import type { Bundle } from "../loaders/index.js";
 import { run } from "../runner/index.js";
+import { formatPreflightFailures, preflightImports } from "../runner/preflight.js";
 import type { Aggregator, JudgeConfig } from "../runner/types.js";
 import type { Report } from "../schema/report.js";
 import { baselinePathFor } from "./baseline.js";
@@ -27,6 +28,7 @@ Options:
   --format <fmt>                json | md | both (default: both)
   --filter <ids>                Comma-separated fixture ids to run (subset)
   --limit <n>                   Run only the first N fixtures
+  --no-preflight                Skip the import-resolution preflight
   --quiet                       Suppress stdout summary
   --help                        Show this help
 
@@ -50,6 +52,7 @@ interface ParsedFlags {
   filter: string[] | undefined;
   limit: number | undefined;
   updateBaseline: boolean;
+  noPreflight: boolean;
   quiet: boolean;
 }
 
@@ -65,6 +68,13 @@ async function main(): Promise<void> {
 
   if (flags.updateBaseline && (flags.filter || flags.limit !== undefined)) {
     die("--update-baseline cannot be combined with --filter/--limit (it would bless a partial suite)");
+  }
+
+  if (!flags.noPreflight) {
+    const failures = await preflightImports(bundle!.spec, bundle!.rubric, flags.specPath);
+    if (failures.length > 0) {
+      die(`preflight: unresolved import(s)\n${formatPreflightFailures(failures)}`);
+    }
   }
 
   bundle = { ...bundle!, fixtures: applyFixtureFilter(bundle!.fixtures, flags) };
@@ -121,6 +131,7 @@ async function parseFlags(): Promise<ParsedFlags> {
         filter: { type: "string" },
         limit: { type: "string" },
         "no-baseline": { type: "boolean", default: false },
+        "no-preflight": { type: "boolean", default: false },
         "update-baseline": { type: "boolean", default: false },
         quiet: { type: "boolean", default: false },
         help: { type: "boolean", default: false },
@@ -222,6 +233,7 @@ async function parseFlags(): Promise<ParsedFlags> {
     filter,
     limit,
     updateBaseline: Boolean(values["update-baseline"]),
+    noPreflight: Boolean(values["no-preflight"]),
     quiet: Boolean(values.quiet),
   };
 }

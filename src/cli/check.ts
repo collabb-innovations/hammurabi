@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { loadBundle, loadReport } from "../loaders/index.js";
 import { run } from "../runner/index.js";
+import { formatPreflightFailures, preflightImports } from "../runner/preflight.js";
 import type { Report } from "../schema/report.js";
 import { baselinePathFor } from "./baseline.js";
 import { diffAgainstBaseline } from "./baseline-diff.js";
@@ -25,6 +26,7 @@ panel for each bundle comes from its own spec eval block.
 Options:
   --update-baseline             Re-bless every bundle's baseline; exit 0
   --no-baseline                 Skip baseline auto-discovery (no regression check)
+  --no-preflight                Skip the import-resolution preflight
   --regression-threshold <n>    Per-fixture delta threshold (default: 0.05)
   --out <dir>                   Where to write check-report.json (default: cwd)
   --quiet                       Suppress per-bundle stdout
@@ -37,8 +39,15 @@ Exit codes:
 `;
 
 async function main(): Promise<void> {
-  const { dir, updateBaseline, noBaseline, regressionThreshold, outDir, quiet } =
-    parseFlags();
+  const {
+    dir,
+    updateBaseline,
+    noBaseline,
+    noPreflight,
+    regressionThreshold,
+    outDir,
+    quiet,
+  } = parseFlags();
 
   const specs = await discoverSpecs(dir);
   if (specs.length === 0) {
@@ -48,7 +57,12 @@ async function main(): Promise<void> {
   const outcomes: BundleOutcome[] = [];
   for (const specPath of specs) {
     outcomes.push(
-      await runBundle(specPath, { updateBaseline, noBaseline, regressionThreshold }),
+      await runBundle(specPath, {
+        updateBaseline,
+        noBaseline,
+        noPreflight,
+        regressionThreshold,
+      }),
     );
   }
 
@@ -64,11 +78,21 @@ async function runBundle(
   opts: {
     updateBaseline: boolean;
     noBaseline: boolean;
+    noPreflight: boolean;
     regressionThreshold: number | undefined;
   },
 ): Promise<BundleOutcome> {
   try {
     const bundle = await loadBundle(specPath);
+    if (!opts.noPreflight) {
+      const failures = await preflightImports(bundle.spec, bundle.rubric, specPath);
+      if (failures.length > 0) {
+        return {
+          specPath,
+          error: `preflight: unresolved import(s)\n${formatPreflightFailures(failures)}`,
+        };
+      }
+    }
     let baseline: Report | undefined;
     if (!opts.noBaseline && !opts.updateBaseline) {
       const auto = baselinePathFor(specPath);
@@ -129,6 +153,7 @@ function parseFlags(): {
   dir: string;
   updateBaseline: boolean;
   noBaseline: boolean;
+  noPreflight: boolean;
   regressionThreshold: number | undefined;
   outDir: string;
   quiet: boolean;
@@ -140,6 +165,7 @@ function parseFlags(): {
       options: {
         "update-baseline": { type: "boolean", default: false },
         "no-baseline": { type: "boolean", default: false },
+        "no-preflight": { type: "boolean", default: false },
         "regression-threshold": { type: "string" },
         out: { type: "string" },
         quiet: { type: "boolean", default: false },
@@ -172,6 +198,7 @@ function parseFlags(): {
     dir: resolve(positionals[0]),
     updateBaseline: Boolean(values["update-baseline"]),
     noBaseline: Boolean(values["no-baseline"]),
+    noPreflight: Boolean(values["no-preflight"]),
     regressionThreshold,
     outDir: values.out ? resolve(values.out) : process.cwd(),
     quiet: Boolean(values.quiet),
