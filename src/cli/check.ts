@@ -5,8 +5,16 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { loadBundle, loadReport } from "../loaders/index.js";
 import { run } from "../runner/index.js";
+import { formatPreflightFailures, preflightImports } from "../runner/preflight.js";
 import type { Report } from "../schema/report.js";
 import { baselinePathFor } from "./baseline.js";
+import { diffAgainstBaseline } from "./baseline-diff.js";
+import {
+  bundleEntryForCombined,
+  exitCode,
+  formatSummary,
+  type BundleOutcome,
+} from "./check-helpers.js";
 import { renderReportMarkdown } from "./report-md.js";
 
 const HELP = `Usage: hammurabi-check <dir> [options]
@@ -18,27 +26,28 @@ panel for each bundle comes from its own spec eval block.
 Options:
   --update-baseline             Re-bless every bundle's baseline; exit 0
   --no-baseline                 Skip baseline auto-discovery (no regression check)
+  --no-preflight                Skip the import-resolution preflight
   --regression-threshold <n>    Per-fixture delta threshold (default: 0.05)
   --out <dir>                   Where to write check-report.json (default: cwd)
   --quiet                       Suppress per-bundle stdout
   --help                        Show this help
 
 Exit codes:
-  0  every bundle passed, no regressions
-  1  any fixture failed or regressed
+  0  no NEW failures and no regressions (baselined failures are warnings)
+  1  any new failure or regression
   2  a bundle could not be loaded or run
 `;
 
-interface BundleOutcome {
-  specPath: string;
-  specName?: string;
-  report?: Report;
-  error?: string;
-}
-
 async function main(): Promise<void> {
-  const { dir, updateBaseline, noBaseline, regressionThreshold, outDir, quiet } =
-    parseFlags();
+  const {
+    dir,
+    updateBaseline,
+    noBaseline,
+    noPreflight,
+    regressionThreshold,
+    outDir,
+    quiet,
+  } = parseFlags();
 
   const specs = await discoverSpecs(dir);
   if (specs.length === 0) {
@@ -48,7 +57,12 @@ async function main(): Promise<void> {
   const outcomes: BundleOutcome[] = [];
   for (const specPath of specs) {
     outcomes.push(
-      await runBundle(specPath, { updateBaseline, noBaseline, regressionThreshold }),
+      await runBundle(specPath, {
+        updateBaseline,
+        noBaseline,
+        noPreflight,
+        regressionThreshold,
+      }),
     );
   }
 
@@ -64,11 +78,21 @@ async function runBundle(
   opts: {
     updateBaseline: boolean;
     noBaseline: boolean;
+    noPreflight: boolean;
     regressionThreshold: number | undefined;
   },
 ): Promise<BundleOutcome> {
   try {
     const bundle = await loadBundle(specPath);
+    if (!opts.noPreflight) {
+      const failures = await preflightImports(bundle.spec, bundle.rubric, specPath);
+      if (failures.length > 0) {
+        return {
+          specPath,
+          error: `preflight: unresolved import(s)\n${formatPreflightFailures(failures)}`,
+        };
+      }
+    }
     let baseline: Report | undefined;
     if (!opts.noBaseline && !opts.updateBaseline) {
       const auto = baselinePathFor(specPath);
@@ -86,7 +110,8 @@ async function runBundle(
     if (opts.updateBaseline) {
       await writeFile(baselinePathFor(specPath), JSON.stringify(report, null, 2));
     }
-    return { specPath, specName: report.specName, report };
+    const diff = diffAgainstBaseline(report, baseline);
+    return { specPath, specName: report.specName, report, baseline, diff };
   } catch (e) {
     return { specPath, error: (e as Error).message };
   }
@@ -109,44 +134,6 @@ async function discoverSpecs(dir: string): Promise<string[]> {
   return out.sort();
 }
 
-function exitCode(outcomes: BundleOutcome[]): 0 | 1 | 2 {
-  if (outcomes.some((o) => o.error)) return 2;
-  const bad = outcomes.some((o) => {
-    const s = o.report!.summary;
-    return s.failed > 0 || s.errored > 0 || (s.regressions?.length ?? 0) > 0;
-  });
-  return bad ? 1 : 0;
-}
-
-function formatSummary(
-  outcomes: BundleOutcome[],
-  updateBaseline: boolean,
-): string {
-  const lines: string[] = [];
-  let totalFx = 0;
-  let totalPass = 0;
-  for (const o of outcomes) {
-    if (o.error) {
-      lines.push(`  ⚠ ERROR  ${o.specPath}\n           ${o.error}`);
-      continue;
-    }
-    const s = o.report!.summary;
-    totalFx += s.totalFixtures;
-    totalPass += s.passed;
-    const regs = s.regressions?.length ?? 0;
-    const ok = s.failed === 0 && s.errored === 0 && regs === 0;
-    lines.push(
-      `  ${ok ? "✓ PASS " : "✗ FAIL "} ${o.specName ?? o.specPath}  ` +
-        `${s.passed}/${s.totalFixtures} passed  weighted ${s.weightedScore.toFixed(3)}` +
-        (regs > 0 ? `  ${regs} regression(s)` : ""),
-    );
-  }
-  const header = updateBaseline
-    ? `Blessed ${outcomes.length} bundle baseline(s).`
-    : `Checked ${outcomes.length} bundle(s) — ${totalPass}/${totalFx} fixtures passed.`;
-  return `${header}\n${lines.join("\n")}\n`;
-}
-
 async function writeCombined(
   outDir: string,
   outcomes: BundleOutcome[],
@@ -154,11 +141,7 @@ async function writeCombined(
   await mkdir(outDir, { recursive: true });
   const combined = {
     checkedAt: new Date().toISOString(),
-    bundles: outcomes.map((o) => ({
-      specPath: o.specPath,
-      specName: o.specName,
-      ...(o.error ? { error: o.error } : { summary: o.report!.summary }),
-    })),
+    bundles: outcomes.map(bundleEntryForCombined),
   };
   await writeFile(
     join(outDir, "check-report.json"),
@@ -170,6 +153,7 @@ function parseFlags(): {
   dir: string;
   updateBaseline: boolean;
   noBaseline: boolean;
+  noPreflight: boolean;
   regressionThreshold: number | undefined;
   outDir: string;
   quiet: boolean;
@@ -181,6 +165,7 @@ function parseFlags(): {
       options: {
         "update-baseline": { type: "boolean", default: false },
         "no-baseline": { type: "boolean", default: false },
+        "no-preflight": { type: "boolean", default: false },
         "regression-threshold": { type: "string" },
         out: { type: "string" },
         quiet: { type: "boolean", default: false },
@@ -213,6 +198,7 @@ function parseFlags(): {
     dir: resolve(positionals[0]),
     updateBaseline: Boolean(values["update-baseline"]),
     noBaseline: Boolean(values["no-baseline"]),
+    noPreflight: Boolean(values["no-preflight"]),
     regressionThreshold,
     outDir: values.out ? resolve(values.out) : process.cwd(),
     quiet: Boolean(values.quiet),

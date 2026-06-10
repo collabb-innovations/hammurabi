@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.1.1
+
+A patch driven by signal from the first wave of bundle authors. No schema
+change, no API break — drop-in upgrade from 0.1.0.
+
+### Changed (policy)
+
+- **`hammurabi-run` and `hammurabi-check` exit codes are now baseline-aware.**
+  Exit 1 fires on **new failures** (fixture passed in baseline, fails now) and
+  regressions — not on baselined-still-failing fixtures. A bundle whose
+  honest baseline contains legitimate red fixtures can now sit in a CI gate.
+  The previous behavior ("exit 1 if any fixture currently fails") forced
+  teams to either quarantine fixtures or scope the gate to changed bundles
+  only; both are anti-patterns Hammurabi exists to prevent. Baselined-failing
+  fixtures surface as `known-fail (baselined)` warnings. A baselined fixture
+  that now passes surfaces as an `improvement` prompt to re-bless with
+  `--update-baseline`. (#12 — continuum F-326, `mood-board-search`)
+
+### Added
+
+- **Import-resolution preflight.** Both CLI bins dry-import every dynamic
+  module the bundle loads — the function-target's module and every
+  code-evaluator criterion's module — BEFORE scoring. Unresolved deps exit 2
+  with a precise message naming the criterion or target and the failing
+  module. Catches the silent-mid-scoring-failure trap from continuum#248
+  round 4 (a bundle whose `ajv` import resolved only via incidental hoist to
+  the wrong major). Skip with `--no-preflight`. (#8)
+- **Combined `check-report.json`** entries gain `newFailures`, `knownFailures`,
+  and `improvements` counts per bundle.
+- **`--no-preflight`** flag on `hammurabi-run` and `hammurabi-check`.
+- **`docs/authoring-guide.md`** — long-form walkthrough of the three
+  authoring footguns from the continuum#248 adversarial review. Packaged in
+  the npm tarball. (#11)
+- **`/hammurabi` Step 1.5** — bundle hygiene checklist runs before rubric
+  authoring on every new bundle. (#11)
+
+### Docs
+
+- README gains a top-level "Authoring guidance" section. (#11)
+- README's CLI section documents the new baseline-aware exit codes and the
+  preflight behavior.
+
 ## 0.1.0
 
 The SDLC release: judge panels are now authored, multi-provider, and

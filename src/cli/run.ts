@@ -6,9 +6,11 @@ import { parseArgs } from "node:util";
 import { loadBundle, loadReport } from "../loaders/index.js";
 import type { Bundle } from "../loaders/index.js";
 import { run } from "../runner/index.js";
+import { formatPreflightFailures, preflightImports } from "../runner/preflight.js";
 import type { Aggregator, JudgeConfig } from "../runner/types.js";
 import type { Report } from "../schema/report.js";
 import { baselinePathFor } from "./baseline.js";
+import { diffAgainstBaseline } from "./baseline-diff.js";
 import { renderReportMarkdown } from "./report-md.js";
 
 const HELP = `Usage: hammurabi-run <spec-path> [options]
@@ -26,12 +28,13 @@ Options:
   --format <fmt>                json | md | both (default: both)
   --filter <ids>                Comma-separated fixture ids to run (subset)
   --limit <n>                   Run only the first N fixtures
+  --no-preflight                Skip the import-resolution preflight
   --quiet                       Suppress stdout summary
   --help                        Show this help
 
 Exit codes:
-  0  all fixtures passed, no regressions
-  1  any failure or regression
+  0  no NEW failures and no regressions (baselined failures are warnings)
+  1  any new failure or regression
   2  could not run (bad args, malformed bundle, runner error)
 `;
 
@@ -49,6 +52,7 @@ interface ParsedFlags {
   filter: string[] | undefined;
   limit: number | undefined;
   updateBaseline: boolean;
+  noPreflight: boolean;
   quiet: boolean;
 }
 
@@ -64,6 +68,13 @@ async function main(): Promise<void> {
 
   if (flags.updateBaseline && (flags.filter || flags.limit !== undefined)) {
     die("--update-baseline cannot be combined with --filter/--limit (it would bless a partial suite)");
+  }
+
+  if (!flags.noPreflight) {
+    const failures = await preflightImports(bundle!.spec, bundle!.rubric, flags.specPath);
+    if (failures.length > 0) {
+      die(`preflight: unresolved import(s)\n${formatPreflightFailures(failures)}`);
+    }
   }
 
   bundle = { ...bundle!, fixtures: applyFixtureFilter(bundle!.fixtures, flags) };
@@ -82,9 +93,10 @@ async function main(): Promise<void> {
   }
 
   const paths = await writeReports(flags, report!);
+  const diff = diffAgainstBaseline(report!, flags.baseline);
 
   if (!flags.quiet) {
-    process.stdout.write(formatCliSummary(report!, flags, paths));
+    process.stdout.write(formatCliSummary(report!, flags, paths, diff));
   }
 
   if (flags.updateBaseline) {
@@ -96,10 +108,12 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  const hasFailure =
-    report!.summary.failed > 0 || report!.summary.errored > 0;
+  // New-failures (not in baseline) and regressions break the gate; baselined
+  // failures stay quiet — see issue #12 for the policy rationale.
+  const hasNewFailure = diff.newFailures.length > 0;
+  const hasErrored = report!.summary.errored > 0;
   const hasRegression = (report!.summary.regressions?.length ?? 0) > 0;
-  process.exit(hasFailure || hasRegression ? 1 : 0);
+  process.exit(hasNewFailure || hasErrored || hasRegression ? 1 : 0);
 }
 
 async function parseFlags(): Promise<ParsedFlags> {
@@ -117,6 +131,7 @@ async function parseFlags(): Promise<ParsedFlags> {
         filter: { type: "string" },
         limit: { type: "string" },
         "no-baseline": { type: "boolean", default: false },
+        "no-preflight": { type: "boolean", default: false },
         "update-baseline": { type: "boolean", default: false },
         quiet: { type: "boolean", default: false },
         help: { type: "boolean", default: false },
@@ -218,6 +233,7 @@ async function parseFlags(): Promise<ParsedFlags> {
     filter,
     limit,
     updateBaseline: Boolean(values["update-baseline"]),
+    noPreflight: Boolean(values["no-preflight"]),
     quiet: Boolean(values.quiet),
   };
 }
@@ -263,16 +279,31 @@ function formatCliSummary(
   report: Report,
   flags: ParsedFlags,
   paths: { jsonPath: string; mdPath: string },
+  diff: { newFailures: string[]; knownFailures: string[]; improvements: string[] },
 ): string {
   const s = report.summary;
   const regCount = s.regressions?.length ?? 0;
+  const newFails = diff.newFailures.length;
+  const knownFails = diff.knownFailures.length;
+  const imps = diff.improvements.length;
   const status =
-    s.failed === 0 && s.errored === 0 && regCount === 0 ? "PASS" : "FAIL";
-  const lines = [
-    `${status}  ${s.passed}/${s.totalFixtures} passed  weighted ${s.weightedScore.toFixed(3)}  regressions ${regCount}`,
+    newFails === 0 && s.errored === 0 && regCount === 0 ? "PASS" : "FAIL";
+  const annotations: string[] = [
+    `${s.passed}/${s.totalFixtures} passed`,
+    `weighted ${s.weightedScore.toFixed(3)}`,
+    `regressions ${regCount}`,
   ];
+  if (newFails > 0) annotations.push(`new-fail ${newFails}`);
+  if (knownFails > 0) annotations.push(`known-fail ${knownFails}`);
+  if (imps > 0) annotations.push(`improvement ${imps}`);
+  const lines = [`${status}  ${annotations.join("  ")}`];
   if (flags.format !== "md") lines.push(`  json: ${paths.jsonPath}`);
   if (flags.format !== "json") lines.push(`  md:   ${paths.mdPath}`);
+  if (imps > 0) {
+    lines.push(
+      `  ❍ baselined failures now passing — re-bless with --update-baseline`,
+    );
+  }
   return lines.join("\n") + "\n";
 }
 
