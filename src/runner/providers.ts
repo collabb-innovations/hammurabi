@@ -166,10 +166,14 @@ function deepseek(): OpenAI {
 }
 
 async function callDeepSeek(req: JudgeCallRequest): Promise<JudgeCallResponse> {
-  // deepseek-reasoner rejects `temperature` and `response_format`; deepseek-chat
-  // supports JSON-object mode (which requires "json" to appear in the prompt —
-  // JSON_INSTRUCTION satisfies that). Pin the shape via the prompt either way.
-  const reasoner = isReasoningModel(req.model);
+  // DeepSeek follows OpenAI's wire format. Thinking is requested two ways and we
+  // honor both: an intrinsically-reasoning model (the deepseek-reasoner alias)
+  // OR a configured `reasoning` effort on a hybrid model (e.g. deepseek-v4-pro),
+  // mapped to OpenAI-style `reasoning_effort`. In thinking mode DeepSeek rejects
+  // `temperature`/`response_format` like OpenAI's reasoning models, so we pin
+  // the JSON shape via the prompt (JSON_INSTRUCTION) and parse it back instead.
+  const effort = reasoningToOpenAIEffort(req.reasoning);
+  const reasoning = effort !== undefined || isReasoningModel(req.model);
   const completion = await deepseek().chat.completions.create({
     model: req.model,
     messages: [
@@ -179,7 +183,8 @@ async function callDeepSeek(req: JudgeCallRequest): Promise<JudgeCallResponse> {
       },
       { role: "user", content: req.userMessage },
     ],
-    ...(reasoner
+    ...(effort ? { reasoning_effort: effort } : {}),
+    ...(reasoning
       ? {}
       : { temperature: 0, response_format: { type: "json_object" } }),
   });

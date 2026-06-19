@@ -167,8 +167,10 @@ Resolution precedence: CLI/`RunOptions` override **>** `eval.judges` **>**
 `eval.riskTier` preset **>** a single default Haiku judge.
 
 Set the provider keys you use: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
-`GEMINI_API_KEY`, `DEEPSEEK_API_KEY` (`AI_GATEWAY_URL` / `OPENAI_BASE_URL` route
-through a gateway; `DEEPSEEK_BASE_URL` overrides DeepSeek's default endpoint).
+`GEMINI_API_KEY`, `DEEPSEEK_API_KEY`. Base-URL overrides are **per provider** and
+each only redirects its own provider's traffic: `AI_GATEWAY_URL` (Anthropic),
+`OPENAI_BASE_URL` (OpenAI), `DEEPSEEK_BASE_URL` (DeepSeek). There is no single
+variable that routes every provider through one gateway.
 
 ## Deterministic (code-scored) criteria
 
