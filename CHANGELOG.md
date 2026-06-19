@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.0
+
+A minor release adding a fourth judge provider. No schema break — existing
+specs and baselines are a drop-in upgrade from 0.1.1.
+
+### Added
+
+- **DeepSeek as a judge provider** (`provider: deepseek`). DeepSeek's API is
+  OpenAI-compatible, so the judge handler reuses the existing `openai` SDK
+  pointed at DeepSeek's endpoint — no new dependency. Configure with
+  `DEEPSEEK_API_KEY` (and optional `DEEPSEEK_BASE_URL`). Reasoning is honored
+  both via the intrinsically-reasoning `deepseek-reasoner` alias and via a
+  configured `reasoning` effort on hybrid models (mapped to OpenAI-style
+  `reasoning_effort`). DeepSeek is **opt-in** — add it as an explicit `judges`
+  entry; the `riskTier` presets are unchanged. (#15)
+
+### Docs
+
+- Clarified that base-URL overrides are per provider and each only redirects
+  its own provider's traffic (`AI_GATEWAY_URL` → Anthropic, `OPENAI_BASE_URL`
+  → OpenAI, `DEEPSEEK_BASE_URL` → DeepSeek).
+
 ## 0.1.1
 
 A patch driven by signal from the first wave of bundle authors. No schema

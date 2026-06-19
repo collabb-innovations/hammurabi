@@ -4,7 +4,7 @@
 
 [![npm](https://img.shields.io/npm/v/@collabb/hammurabi.svg)](https://www.npmjs.com/package/@collabb/hammurabi)
 
-**Status:** alpha (v0.1.1). On-disk loaders, CLI runner, a **multi-provider** judge panel (Anthropic + OpenAI + Google + DeepSeek) **configured in the spec frontmatter**, **deterministic code-scored criteria**, **baseline-aware exit semantics** (known-fail tier), **import-resolution preflight**, baseline regression detection, and a repo-wide `hammurabi-check` CI command are all shipped. Schemas use Zod v4.
+**Status:** alpha (v0.2.0). On-disk loaders, CLI runner, a **multi-provider** judge panel (Anthropic + OpenAI + Google + DeepSeek) **configured in the spec frontmatter**, **deterministic code-scored criteria**, **baseline-aware exit semantics** (known-fail tier), **import-resolution preflight**, baseline regression detection, and a repo-wide `hammurabi-check` CI command are all shipped. Schemas use Zod v4.
 
 ## Why
 
