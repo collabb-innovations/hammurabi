@@ -65,6 +65,8 @@ export async function callJudge(
       return callOpenAI(req);
     case "google":
       return callGoogle(req);
+    case "deepseek":
+      return callDeepSeek(req);
   }
 }
 
@@ -144,6 +146,51 @@ async function callOpenAI(req: JudgeCallRequest): Promise<JudgeCallResponse> {
 
   const raw = completion.choices[0]?.message?.content ?? "";
   return parseJudgeJson(raw, `OpenAI judge ${req.model}`);
+}
+
+// ---------------------------------------------------------------------------
+// DeepSeek — OpenAI-compatible API. JSON-object response format + prompt-pinned
+// shape (no strict json_schema support); validated with zod like Gemini.
+// ---------------------------------------------------------------------------
+
+let _deepseek: OpenAI | undefined;
+function deepseek(): OpenAI {
+  if (!_deepseek) {
+    _deepseek = new OpenAI({
+      apiKey: process.env.DEEPSEEK_API_KEY,
+      baseURL: process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com",
+      maxRetries: 4,
+    });
+  }
+  return _deepseek;
+}
+
+async function callDeepSeek(req: JudgeCallRequest): Promise<JudgeCallResponse> {
+  // DeepSeek follows OpenAI's wire format. Thinking is requested two ways and we
+  // honor both: an intrinsically-reasoning model (the deepseek-reasoner alias)
+  // OR a configured `reasoning` effort on a hybrid model (e.g. deepseek-v4-pro),
+  // mapped to OpenAI-style `reasoning_effort`. In thinking mode DeepSeek rejects
+  // `temperature`/`response_format` like OpenAI's reasoning models, so we pin
+  // the JSON shape via the prompt (JSON_INSTRUCTION) and parse it back instead.
+  const effort = reasoningToOpenAIEffort(req.reasoning);
+  const reasoning = effort !== undefined || isReasoningModel(req.model);
+  const completion = await deepseek().chat.completions.create({
+    model: req.model,
+    messages: [
+      {
+        role: "system",
+        content: `${joinBlocks(req.systemBlocks)}\n\n${JSON_INSTRUCTION}`,
+      },
+      { role: "user", content: req.userMessage },
+    ],
+    ...(effort ? { reasoning_effort: effort } : {}),
+    ...(reasoning
+      ? {}
+      : { temperature: 0, response_format: { type: "json_object" } }),
+  });
+
+  const raw = completion.choices[0]?.message?.content ?? "";
+  return parseJudgeJson(raw, `DeepSeek judge ${req.model}`);
 }
 
 // ---------------------------------------------------------------------------

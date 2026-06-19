@@ -4,7 +4,7 @@
 
 [![npm](https://img.shields.io/npm/v/@collabb/hammurabi.svg)](https://www.npmjs.com/package/@collabb/hammurabi)
 
-**Status:** alpha (v0.1.1). On-disk loaders, CLI runner, a **multi-provider** judge panel (Anthropic + OpenAI + Google) **configured in the spec frontmatter**, **deterministic code-scored criteria**, **baseline-aware exit semantics** (known-fail tier), **import-resolution preflight**, baseline regression detection, and a repo-wide `hammurabi-check` CI command are all shipped. Schemas use Zod v4.
+**Status:** alpha (v0.1.1). On-disk loaders, CLI runner, a **multi-provider** judge panel (Anthropic + OpenAI + Google + DeepSeek) **configured in the spec frontmatter**, **deterministic code-scored criteria**, **baseline-aware exit semantics** (known-fail tier), **import-resolution preflight**, baseline regression detection, and a repo-wide `hammurabi-check` CI command are all shipped. Schemas use Zod v4.
 
 ## Why
 
@@ -154,10 +154,11 @@ eval:
 - **`riskTier`** (`low` | `medium` | `high` | `critical`) expands to a default
   panel via `RISK_TIER_PRESETS` — higher tier means more judges, more providers,
   more reasoning, more conservative aggregation. Override any of it with explicit
-  `judges` / `aggregator`.
+  `judges` / `aggregator`. The presets use Anthropic/OpenAI/Google only;
+  **DeepSeek is opt-in** — add it via an explicit `judges` entry.
 - **`reasoning`** (`none` | `low` | `medium` | `high` | a token budget) maps to
   each provider's mechanism: Anthropic extended thinking, OpenAI
-  `reasoning_effort`, Gemini thinking budget.
+  `reasoning_effort`, Gemini thinking budget, DeepSeek `deepseek-reasoner`.
 - **Cross-provider bias mitigation** — no judge should share the output's
   provider (same-family models rate their own style leniently). Set
   `generatorProvider` and the runner warns when a judge collides with it.
@@ -166,7 +167,10 @@ Resolution precedence: CLI/`RunOptions` override **>** `eval.judges` **>**
 `eval.riskTier` preset **>** a single default Haiku judge.
 
 Set the provider keys you use: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
-`GEMINI_API_KEY` (`AI_GATEWAY_URL` / `OPENAI_BASE_URL` route through a gateway).
+`GEMINI_API_KEY`, `DEEPSEEK_API_KEY`. Base-URL overrides are **per provider** and
+each only redirects its own provider's traffic: `AI_GATEWAY_URL` (Anthropic),
+`OPENAI_BASE_URL` (OpenAI), `DEEPSEEK_BASE_URL` (DeepSeek). There is no single
+variable that routes every provider through one gateway.
 
 ## Deterministic (code-scored) criteria
 
