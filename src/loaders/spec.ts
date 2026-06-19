@@ -26,7 +26,12 @@ const SpecTargetSchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 
-const JudgeProviderSchema = z.enum(["anthropic", "google", "openai"]);
+const JudgeProviderSchema = z.enum([
+  "anthropic",
+  "google",
+  "openai",
+  "deepseek",
+]);
 
 const ReasoningEffortSchema = z.union([
   z.enum(["none", "low", "medium", "high"]),

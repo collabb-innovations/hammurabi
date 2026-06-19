@@ -65,6 +65,8 @@ export async function callJudge(
       return callOpenAI(req);
     case "google":
       return callGoogle(req);
+    case "deepseek":
+      return callDeepSeek(req);
   }
 }
 
@@ -144,6 +146,46 @@ async function callOpenAI(req: JudgeCallRequest): Promise<JudgeCallResponse> {
 
   const raw = completion.choices[0]?.message?.content ?? "";
   return parseJudgeJson(raw, `OpenAI judge ${req.model}`);
+}
+
+// ---------------------------------------------------------------------------
+// DeepSeek — OpenAI-compatible API. JSON-object response format + prompt-pinned
+// shape (no strict json_schema support); validated with zod like Gemini.
+// ---------------------------------------------------------------------------
+
+let _deepseek: OpenAI | undefined;
+function deepseek(): OpenAI {
+  if (!_deepseek) {
+    _deepseek = new OpenAI({
+      apiKey: process.env.DEEPSEEK_API_KEY,
+      baseURL: process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com",
+      maxRetries: 4,
+    });
+  }
+  return _deepseek;
+}
+
+async function callDeepSeek(req: JudgeCallRequest): Promise<JudgeCallResponse> {
+  // deepseek-reasoner rejects `temperature` and `response_format`; deepseek-chat
+  // supports JSON-object mode (which requires "json" to appear in the prompt —
+  // JSON_INSTRUCTION satisfies that). Pin the shape via the prompt either way.
+  const reasoner = isReasoningModel(req.model);
+  const completion = await deepseek().chat.completions.create({
+    model: req.model,
+    messages: [
+      {
+        role: "system",
+        content: `${joinBlocks(req.systemBlocks)}\n\n${JSON_INSTRUCTION}`,
+      },
+      { role: "user", content: req.userMessage },
+    ],
+    ...(reasoner
+      ? {}
+      : { temperature: 0, response_format: { type: "json_object" } }),
+  });
+
+  const raw = completion.choices[0]?.message?.content ?? "";
+  return parseJudgeJson(raw, `DeepSeek judge ${req.model}`);
 }
 
 // ---------------------------------------------------------------------------

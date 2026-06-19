@@ -17,7 +17,7 @@ export type SpecTarget =
   | { kind: "http"; url: string; method?: string }
   | { kind: "free-form"; description: string };
 
-export type JudgeProvider = "anthropic" | "google" | "openai";
+export type JudgeProvider = "anthropic" | "google" | "openai" | "deepseek";
 
 export type AggregatorName = "mean" | "median" | "min" | "max";
 

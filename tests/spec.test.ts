@@ -273,6 +273,25 @@ eval:
   assert.equal(spec.frontmatter.eval?.judges, undefined);
 });
 
+test("parseSpec accepts a deepseek judge", () => {
+  const content = `---
+name: foo
+version: "1.0.0"
+description: x
+target:
+  kind: free-form
+  description: x
+eval:
+  judges:
+    - provider: deepseek
+      model: deepseek-chat
+      role: primary
+---
+`;
+  const spec = parseSpec(content);
+  assert.equal(spec.frontmatter.eval?.judges?.[0].provider, "deepseek");
+});
+
 test("parseSpec rejects an unknown judge provider", () => {
   const content = `---
 name: foo
