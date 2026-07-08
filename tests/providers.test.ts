@@ -7,6 +7,9 @@ import {
   isNonNativeDeepSeekHost,
   buildDeepSeekCompletionParams,
   buildOpenAICompatibleParams,
+  resolveOpenAICompatibleEndpoint,
+  FIREWORKS_DEFAULT_BASE_URL,
+  callJudge,
   parseJudgeJson,
   JUDGE_JSON_SCHEMA,
 } from "../src/runner/providers.js";
@@ -101,6 +104,69 @@ test("OpenAI-compatible params in thinking mode are byte-identical to non-native
   });
 });
 
+test("fireworks endpoint defaults to the Fireworks API and honors FIREWORKS_BASE_URL", () => {
+  withEnv("FIREWORKS_BASE_URL", undefined, () => {
+    assert.deepEqual(resolveOpenAICompatibleEndpoint(compatRequest("fireworks")), {
+      baseURL: FIREWORKS_DEFAULT_BASE_URL,
+      apiKeyEnv: "FIREWORKS_API_KEY",
+    });
+  });
+  withEnv("FIREWORKS_BASE_URL", "https://gateway.example.com/v1", () => {
+    assert.equal(
+      resolveOpenAICompatibleEndpoint(compatRequest("fireworks")).baseURL,
+      "https://gateway.example.com/v1",
+    );
+  });
+});
+
+test("openai_compatible endpoint comes from the judge entry's base_url/api_key_env", () => {
+  assert.deepEqual(
+    resolveOpenAICompatibleEndpoint(
+      compatRequest("openai_compatible", {
+        baseUrl: "https://llm.example.com/v1",
+        apiKeyEnv: "EXAMPLE_LLM_KEY",
+      }),
+    ),
+    { baseURL: "https://llm.example.com/v1", apiKeyEnv: "EXAMPLE_LLM_KEY" },
+  );
+});
+
+test("openai_compatible without base_url/api_key_env throws", () => {
+  assert.throws(
+    () => resolveOpenAICompatibleEndpoint(compatRequest("openai_compatible")),
+    /base_url and api_key_env/,
+  );
+});
+
+test("callJudge routes fireworks to the shared path and fails loud on a missing key env", async () => {
+  await withEnvAsync("FIREWORKS_API_KEY", undefined, async () => {
+    await assert.rejects(
+      callJudge(compatRequest("fireworks")),
+      /FIREWORKS_API_KEY is not set/,
+    );
+  });
+});
+
+test("callJudge routes openai_compatible to the shared path and names the missing key env", async () => {
+  await withEnvAsync("HAMMURABI_TEST_COMPAT_KEY", undefined, async () => {
+    await assert.rejects(
+      callJudge(
+        compatRequest("openai_compatible", {
+          baseUrl: "https://llm.example.com/v1",
+          apiKeyEnv: "HAMMURABI_TEST_COMPAT_KEY",
+        }),
+      ),
+      /HAMMURABI_TEST_COMPAT_KEY is not set/,
+    );
+  });
+});
+
+test("OpenAI-compatible params carry the frontmatter model string verbatim", () => {
+  const model = "accounts/fireworks/models/deepseek-v3p1";
+  const params = buildOpenAICompatibleParams(compatRequest("fireworks"));
+  assert.strictEqual(params.model, model);
+});
+
 test("parseJudgeJson accepts valid JSON and strips code fences", () => {
   const raw = '```json\n{"scores":[{"criterionId":"a","score":1,"reasoning":"ok"}]}\n```';
   const out = parseJudgeJson(raw, "test");
@@ -135,23 +201,63 @@ function deepSeekRequest(
   };
 }
 
+function compatRequest(
+  provider: "fireworks" | "openai_compatible",
+  extra: Partial<JudgeCallRequest> = {},
+): JudgeCallRequest {
+  return {
+    provider,
+    model: "accounts/fireworks/models/deepseek-v3p1",
+    reasoning: "none",
+    systemBlocks: [{ text: "Judge the output." }],
+    userMessage: "Input and output",
+    ...extra,
+  };
+}
+
 function withDeepSeekBaseUrl<T>(
   value: string | undefined,
   fn: () => T,
 ): T {
-  const previous = process.env.DEEPSEEK_BASE_URL;
+  return withEnv("DEEPSEEK_BASE_URL", value, fn);
+}
+
+function withEnv<T>(name: string, value: string | undefined, fn: () => T): T {
+  const previous = process.env[name];
   try {
     if (value === undefined) {
-      delete process.env.DEEPSEEK_BASE_URL;
+      delete process.env[name];
     } else {
-      process.env.DEEPSEEK_BASE_URL = value;
+      process.env[name] = value;
     }
     return fn();
   } finally {
     if (previous === undefined) {
-      delete process.env.DEEPSEEK_BASE_URL;
+      delete process.env[name];
     } else {
-      process.env.DEEPSEEK_BASE_URL = previous;
+      process.env[name] = previous;
+    }
+  }
+}
+
+async function withEnvAsync<T>(
+  name: string,
+  value: string | undefined,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const previous = process.env[name];
+  try {
+    if (value === undefined) {
+      delete process.env[name];
+    } else {
+      process.env[name] = value;
+    }
+    return await fn();
+  } finally {
+    if (previous === undefined) {
+      delete process.env[name];
+    } else {
+      process.env[name] = previous;
     }
   }
 }

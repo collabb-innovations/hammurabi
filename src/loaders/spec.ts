@@ -31,6 +31,8 @@ const JudgeProviderSchema = z.enum([
   "google",
   "openai",
   "deepseek",
+  "fireworks",
+  "openai_compatible",
 ]);
 
 const ReasoningEffortSchema = z.union([
@@ -45,8 +47,39 @@ const JudgePanelMemberSchema = z
     role: z.string().min(1).optional(),
     reasoning: ReasoningEffortSchema.optional(),
     weight: z.number().positive().optional(),
+    base_url: z.string().url().optional(),
+    api_key_env: z.string().min(1).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((member, ctx) => {
+    // base_url/api_key_env exist to point the generic `openai_compatible`
+    // provider at an endpoint. Every other provider — fireworks included —
+    // has its endpoint and key env var built in, so the keys are rejected
+    // there rather than silently ignored.
+    if (member.provider === "openai_compatible") {
+      for (const key of ["base_url", "api_key_env"] as const) {
+        if (member[key] === undefined) {
+          ctx.addIssue({
+            code: "custom",
+            path: [key],
+            message: `${key} is required when provider is "openai_compatible"`,
+          });
+        }
+      }
+      return;
+    }
+    for (const key of ["base_url", "api_key_env"] as const) {
+      if (member[key] !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: [key],
+          message:
+            `${key} is only allowed when provider is "openai_compatible" — ` +
+            `provider "${member.provider}" has its endpoint built in`,
+        });
+      }
+    }
+  });
 
 const EvalConfigSchema = z
   .object({

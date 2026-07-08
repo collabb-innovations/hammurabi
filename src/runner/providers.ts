@@ -20,6 +20,10 @@ export interface JudgeCallRequest {
   /** System context. `cache: true` blocks are cached on providers that support it. */
   systemBlocks: { text: string; cache?: boolean }[];
   userMessage: string;
+  /** Endpoint base URL — `openai_compatible` judges only (spec `base_url`). */
+  baseUrl?: string;
+  /** Env var holding the endpoint's API key — `openai_compatible` judges only (spec `api_key_env`). */
+  apiKeyEnv?: string;
 }
 
 export interface JudgeCallResponse {
@@ -76,6 +80,9 @@ export async function callJudge(
       return callGoogle(req);
     case "deepseek":
       return callDeepSeek(req);
+    case "fireworks":
+    case "openai_compatible":
+      return callOpenAICompatible(req);
   }
 }
 
@@ -219,6 +226,77 @@ export function buildDeepSeekCompletionParams(
           response_format: { type: "json_object" as const },
         }),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Fireworks + generic OpenAI-compatible hosts — one shared parameterized
+// client. `fireworks` is first-class (endpoint + key env baked in);
+// `openai_compatible` is the escape hatch for any other OpenAI-compatible
+// endpoint, configured per judge entry via base_url/api_key_env.
+// ---------------------------------------------------------------------------
+
+export const FIREWORKS_DEFAULT_BASE_URL =
+  "https://api.fireworks.ai/inference/v1";
+
+// Cached per (baseURL, api-key env var), NOT a single singleton — one panel
+// can mix judges pointed at different hosts and keys in the same run.
+const _openAICompatibleClients = new Map<string, OpenAI>();
+
+function openAICompatibleClient(baseURL: string, apiKeyEnv: string): OpenAI {
+  const cacheKey = `${baseURL}\u0000${apiKeyEnv}`;
+  const cached = _openAICompatibleClients.get(cacheKey);
+  if (cached) return cached;
+  const apiKey = process.env[apiKeyEnv];
+  if (!apiKey) {
+    throw new Error(
+      `OpenAI-compatible judge endpoint ${baseURL}: environment variable ` +
+        `${apiKeyEnv} is not set — export it with the endpoint's API key`,
+    );
+  }
+  const client = new OpenAI({ apiKey, baseURL, maxRetries: 4 });
+  _openAICompatibleClients.set(cacheKey, client);
+  return client;
+}
+
+/** Where an OpenAI-compatible judge call goes, and which env var keys it. */
+export function resolveOpenAICompatibleEndpoint(req: JudgeCallRequest): {
+  baseURL: string;
+  apiKeyEnv: string;
+} {
+  if (req.provider === "fireworks") {
+    return {
+      baseURL: process.env.FIREWORKS_BASE_URL ?? FIREWORKS_DEFAULT_BASE_URL,
+      apiKeyEnv: "FIREWORKS_API_KEY",
+    };
+  }
+  // The spec schema requires both keys for openai_compatible; this guards
+  // callers that build a JudgeCallRequest directly.
+  if (!req.baseUrl || !req.apiKeyEnv) {
+    throw new Error(
+      `openai_compatible judge ${req.model} requires both base_url and api_key_env`,
+    );
+  }
+  return { baseURL: req.baseUrl, apiKeyEnv: req.apiKeyEnv };
+}
+
+export async function callOpenAICompatible(
+  req: JudgeCallRequest,
+): Promise<JudgeCallResponse> {
+  const { baseURL, apiKeyEnv } = resolveOpenAICompatibleEndpoint(req);
+  const completion = await openAICompatibleClient(
+    baseURL,
+    apiKeyEnv,
+  ).chat.completions.create(
+    // The model string flows verbatim from the spec frontmatter to the wire —
+    // hosts like Fireworks use full paths (accounts/fireworks/models/...).
+    buildOpenAICompatibleParams(
+      req,
+    ) as unknown as ChatCompletionCreateParamsNonStreaming,
+  );
+
+  const raw = completion.choices[0]?.message?.content ?? "";
+  const who = req.provider === "fireworks" ? "Fireworks" : "OpenAI-compatible";
+  return parseJudgeJson(raw, `${who} judge ${req.model}`);
 }
 
 /**
