@@ -28,7 +28,7 @@ export interface JudgeCallResponse {
 
 const BASE_MAX_TOKENS = 16384;
 
-type DeepSeekCompletionParams = {
+type OpenAICompatibleCompletionParams = {
   model: string;
   messages: { role: "system" | "user"; content: string }[];
   reasoning_effort?: "low" | "medium" | "high" | "none";
@@ -187,13 +187,19 @@ async function callDeepSeek(req: JudgeCallRequest): Promise<JudgeCallResponse> {
 
 export function buildDeepSeekCompletionParams(
   req: JudgeCallRequest,
-): DeepSeekCompletionParams {
-  // DeepSeek follows OpenAI's wire format. Thinking is requested two ways and we
-  // honor both: an intrinsically-reasoning model (the deepseek-reasoner alias)
-  // OR a configured `reasoning` effort on a hybrid model (e.g. deepseek-v4-pro),
-  // mapped to OpenAI-style `reasoning_effort`. In thinking mode DeepSeek rejects
+): OpenAICompatibleCompletionParams {
+  // Non-native hosts (DEEPSEEK_BASE_URL remapped to e.g. Fireworks) speak the
+  // generic OpenAI-compatible wire shape. Delegating keeps that shape
+  // byte-identical with the fireworks/openai_compatible providers by
+  // construction — one builder, no drift.
+  if (isNonNativeDeepSeekHost()) return buildOpenAICompatibleParams(req);
+  // Native DeepSeek. Thinking is requested two ways and we honor both: an
+  // intrinsically-reasoning model (the deepseek-reasoner alias) OR a configured
+  // `reasoning` effort on a hybrid model (e.g. deepseek-v4-pro), mapped to
+  // OpenAI-style `reasoning_effort`. In thinking mode DeepSeek rejects
   // `temperature`/`response_format` like OpenAI's reasoning models, so we pin
   // the JSON shape via the prompt (JSON_INSTRUCTION) and parse it back instead.
+  // Native DeepSeek stays bare json_object (no schema-constrained decoding).
   const effort = reasoningToOpenAIEffort(req.reasoning);
   const reasoning = effort !== undefined || isReasoningModel(req.model);
   return {
@@ -206,19 +212,49 @@ export function buildDeepSeekCompletionParams(
       { role: "user", content: req.userMessage },
     ],
     ...(effort ? { reasoning_effort: effort } : {}),
-    ...(!reasoning && isNonNativeDeepSeekHost()
-      ? { reasoning_effort: "none" as const }
-      : {}),
-    // Non-native hosts support schema-constrained decoding via response_format
-    // .schema — without it, large judge prompts stochastically drop the scores
-    // wrapper. Native DeepSeek stays bare json_object.
     ...(reasoning
       ? {}
       : {
           temperature: 0,
-          response_format: isNonNativeDeepSeekHost()
-            ? { type: "json_object" as const, schema: JUDGE_JSON_SCHEMA }
-            : { type: "json_object" as const },
+          response_format: { type: "json_object" as const },
+        }),
+  };
+}
+
+/**
+ * Completion params for any OpenAI-compatible host that serves
+ * thinking-by-default hybrid models (Fireworks, Together, vLLM, …). This is
+ * exactly the wire shape the DeepSeek-on-a-non-native-host path sends as of
+ * v0.2.2: non-reasoning calls pin `reasoning_effort: "none"` explicitly (#17)
+ * and carry the judge JSON schema in `response_format` for schema-constrained
+ * decoding (#19); thinking calls omit `temperature`/`response_format` like
+ * OpenAI's reasoning models, so the JSON shape is prompt-pinned
+ * (JSON_INSTRUCTION) and parsed back instead.
+ */
+export function buildOpenAICompatibleParams(
+  req: JudgeCallRequest,
+): OpenAICompatibleCompletionParams {
+  const effort = reasoningToOpenAIEffort(req.reasoning);
+  const reasoning = effort !== undefined || isReasoningModel(req.model);
+  return {
+    model: req.model,
+    messages: [
+      {
+        role: "system",
+        content: `${joinBlocks(req.systemBlocks)}\n\n${JSON_INSTRUCTION}`,
+      },
+      { role: "user", content: req.userMessage },
+    ],
+    ...(effort ? { reasoning_effort: effort } : {}),
+    ...(!reasoning ? { reasoning_effort: "none" as const } : {}),
+    ...(reasoning
+      ? {}
+      : {
+          temperature: 0,
+          response_format: {
+            type: "json_object" as const,
+            schema: JUDGE_JSON_SCHEMA,
+          },
         }),
   };
 }

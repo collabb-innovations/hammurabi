@@ -6,6 +6,7 @@ import {
   isReasoningModel,
   isNonNativeDeepSeekHost,
   buildDeepSeekCompletionParams,
+  buildOpenAICompatibleParams,
   parseJudgeJson,
   JUDGE_JSON_SCHEMA,
 } from "../src/runner/providers.js";
@@ -79,6 +80,24 @@ test("DeepSeek custom base URL with reasoning low keeps thinking payload shape",
     assert.equal(params.reasoning_effort, "low");
     assert.equal("temperature" in params, false);
     assert.equal("response_format" in params, false);
+  });
+});
+
+test("OpenAI-compatible params with reasoning none are byte-identical to non-native DeepSeek params", () => {
+  withDeepSeekBaseUrl("https://api.fireworks.ai/inference/v1", () => {
+    assert.deepStrictEqual(
+      buildOpenAICompatibleParams(deepSeekRequest("none")),
+      buildDeepSeekCompletionParams(deepSeekRequest("none")),
+    );
+  });
+});
+
+test("OpenAI-compatible params in thinking mode are byte-identical to non-native DeepSeek params", () => {
+  withDeepSeekBaseUrl("https://api.fireworks.ai/inference/v1", () => {
+    assert.deepStrictEqual(
+      buildOpenAICompatibleParams(deepSeekRequest("low")),
+      buildDeepSeekCompletionParams(deepSeekRequest("low")),
+    );
   });
 });
 
