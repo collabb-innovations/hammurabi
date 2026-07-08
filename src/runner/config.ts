@@ -66,6 +66,8 @@ export function memberToJudgeConfig(m: JudgePanelMember): JudgeConfig {
     ...(m.role ? { role: m.role } : {}),
     ...(m.reasoning !== undefined ? { reasoning: m.reasoning } : {}),
     ...(m.weight !== undefined ? { weight: m.weight } : {}),
+    ...(m.base_url ? { baseUrl: m.base_url } : {}),
+    ...(m.api_key_env ? { apiKeyEnv: m.api_key_env } : {}),
   };
 }
 

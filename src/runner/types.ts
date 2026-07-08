@@ -17,6 +17,10 @@ export interface JudgeConfig {
   reasoning?: ReasoningEffort;
   /** Relative vote weight within the panel. Defaults to 1. */
   weight?: number;
+  /** Endpoint base URL — `openai_compatible` judges only (spec `base_url`). */
+  baseUrl?: string;
+  /** Env var holding the endpoint's API key — `openai_compatible` judges only (spec `api_key_env`). */
+  apiKeyEnv?: string;
 }
 
 export type Aggregator =

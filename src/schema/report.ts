@@ -30,7 +30,13 @@ export interface Report {
   finishedAt: string;
   specName: string;
   specVersion: string;
-  judges: { model: string; provider?: string; role?: string }[];
+  judges: {
+    model: string;
+    provider?: string;
+    role?: string;
+    /** Endpoint the judge was pointed at — openai_compatible entries only. */
+    base_url?: string;
+  }[];
   aggregator: string;
   criteria: Criterion[];
   results: FixtureResult[];

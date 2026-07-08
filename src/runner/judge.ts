@@ -48,6 +48,8 @@ async function judgeFixtureOne(args: JudgeOneArgs): Promise<JudgeOneScore[]> {
     provider: judge.provider ?? "anthropic",
     model: judge.model,
     reasoning: judge.reasoning ?? "none",
+    ...(judge.baseUrl ? { baseUrl: judge.baseUrl } : {}),
+    ...(judge.apiKeyEnv ? { apiKeyEnv: judge.apiKeyEnv } : {}),
     systemBlocks: [
       { text: SYS_JUDGE },
       { text: specBlob, cache: true },
