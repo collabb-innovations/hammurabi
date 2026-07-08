@@ -53,6 +53,22 @@ test("parseReport accepts a valid report", () => {
   assert.equal(r.results.length, 1);
 });
 
+test("parseReport accepts a judges entry with a base_url (openai_compatible audit trail)", () => {
+  const withEndpoint = {
+    ...validReport,
+    judges: [
+      {
+        model: "kimi-k2-instruct",
+        provider: "openai_compatible",
+        role: "secondary",
+        base_url: "https://llm.example.com/v1",
+      },
+    ],
+  };
+  const r = parseReport(JSON.stringify(withEndpoint));
+  assert.equal(r.judges[0].base_url, "https://llm.example.com/v1");
+});
+
 test("parseReport rejects an empty object", () => {
   assert.throws(() => parseReport("{}"), /Invalid report/);
 });

@@ -59,6 +59,7 @@ const JudgeConfigSchema = z
     model: z.string().min(1),
     provider: z.string().min(1).optional(),
     role: z.string().min(1).optional(),
+    base_url: z.string().min(1).optional(),
   })
   .strict();
 

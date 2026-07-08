@@ -17,7 +17,13 @@ export type SpecTarget =
   | { kind: "http"; url: string; method?: string }
   | { kind: "free-form"; description: string };
 
-export type JudgeProvider = "anthropic" | "google" | "openai" | "deepseek";
+export type JudgeProvider =
+  | "anthropic"
+  | "google"
+  | "openai"
+  | "deepseek"
+  | "fireworks"
+  | "openai_compatible";
 
 export type AggregatorName = "mean" | "median" | "min" | "max";
 
@@ -45,6 +51,16 @@ export interface JudgePanelMember {
   reasoning?: ReasoningEffort;
   /** Relative vote weight within the panel. Defaults to 1. */
   weight?: number;
+  /**
+   * Endpoint base URL. Required when provider is "openai_compatible";
+   * rejected for every other provider (their endpoints are built in).
+   */
+  base_url?: string;
+  /**
+   * Name of the environment variable holding the endpoint's API key.
+   * Required when provider is "openai_compatible"; rejected otherwise.
+   */
+  api_key_env?: string;
 }
 
 export interface EvalConfig {

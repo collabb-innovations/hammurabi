@@ -145,6 +145,9 @@ export async function run(options: RunOptions): Promise<Report> {
       model: j.model,
       ...(j.provider ? { provider: j.provider } : {}),
       ...(j.role ? { role: j.role } : {}),
+      // openai_compatible entries are only meaningful with their endpoint —
+      // record it (as written in the spec) in the audit trail.
+      ...(j.baseUrl ? { base_url: j.baseUrl } : {}),
     })),
     aggregator: typeof aggregator === "function" ? "custom" : aggregator,
     criteria: options.rubric.criteria,

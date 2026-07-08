@@ -4,7 +4,7 @@
 
 [![npm](https://img.shields.io/npm/v/@collabb/hammurabi.svg)](https://www.npmjs.com/package/@collabb/hammurabi)
 
-**Status:** alpha (v0.2.1). On-disk loaders, CLI runner, a **multi-provider** judge panel (Anthropic + OpenAI + Google + DeepSeek) **configured in the spec frontmatter**, **deterministic code-scored criteria**, **baseline-aware exit semantics** (known-fail tier), **import-resolution preflight**, baseline regression detection, and a repo-wide `hammurabi-check` CI command are all shipped. Schemas use Zod v4.
+**Status:** alpha (v0.3.0). On-disk loaders, CLI runner, a **multi-provider** judge panel (Anthropic + OpenAI + Google + DeepSeek + Fireworks + any OpenAI-compatible host) **configured in the spec frontmatter**, **deterministic code-scored criteria**, **baseline-aware exit semantics** (known-fail tier), **import-resolution preflight**, baseline regression detection, and a repo-wide `hammurabi-check` CI command are all shipped. Schemas use Zod v4.
 
 ## Why
 
@@ -155,7 +155,8 @@ eval:
   panel via `RISK_TIER_PRESETS` — higher tier means more judges, more providers,
   more reasoning, more conservative aggregation. Override any of it with explicit
   `judges` / `aggregator`. The presets use Anthropic/OpenAI/Google only;
-  **DeepSeek is opt-in** — add it via an explicit `judges` entry.
+  **DeepSeek, Fireworks and `openai_compatible` are opt-in** — add them via an
+  explicit `judges` entry.
 - **`reasoning`** (`none` | `low` | `medium` | `high` | a token budget) maps to
   each provider's mechanism: Anthropic extended thinking, OpenAI
   `reasoning_effort`, Gemini thinking budget, DeepSeek `deepseek-reasoner`.
@@ -166,19 +167,59 @@ eval:
 Resolution precedence: CLI/`RunOptions` override **>** `eval.judges` **>**
 `eval.riskTier` preset **>** a single default Haiku judge.
 
-Set the provider keys you use: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
-`GEMINI_API_KEY`, `DEEPSEEK_API_KEY`. Base-URL overrides are **per provider** and
-each only redirects its own provider's traffic: `AI_GATEWAY_URL` (Anthropic),
-`OPENAI_BASE_URL` (OpenAI), `DEEPSEEK_BASE_URL` (DeepSeek). There is no single
-variable that routes every provider through one gateway.
+### Providers
 
-When `DEEPSEEK_BASE_URL` points at a non-native OpenAI-compatible host such as
-Fireworks, non-reasoning DeepSeek judges send `reasoning_effort: "none"` along
-with `temperature: 0` and JSON-object mode. Native DeepSeek calls, including an
-unset base URL or `https://api.deepseek.com`, do not send that extra field.
-On those non-native hosts the JSON-object `response_format` also carries the
-judge JSON schema, enabling schema-constrained decoding so large judge prompts
-can't drop the `scores` wrapper.
+| Provider | Key env var | Base URL | Notes |
+| --- | --- | --- | --- |
+| `anthropic` | `ANTHROPIC_API_KEY` | `AI_GATEWAY_URL` override | Native structured output + extended thinking. Default judge. |
+| `openai` | `OPENAI_API_KEY` | `OPENAI_BASE_URL` override | Strict `json_schema` mode; `reasoning_effort` on o-series/gpt-5. |
+| `google` | `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) | — | JSON mime type + thinking budget. |
+| `deepseek` | `DEEPSEEK_API_KEY` | `DEEPSEEK_BASE_URL` override | Native DeepSeek API (OpenAI wire format). |
+| `fireworks` | `FIREWORKS_API_KEY` | `https://api.fireworks.ai/inference/v1` (override: `FIREWORKS_BASE_URL`) | First-class Fireworks serving. Model strings pass to the wire **verbatim** (`accounts/fireworks/models/...`). |
+| `openai_compatible` | the judge entry's `api_key_env` | the judge entry's `base_url` (required) | Escape hatch for any OpenAI-compatible host (Together, vLLM, a gateway, …). |
+
+`fireworks` needs nothing but the key; `openai_compatible` names its endpoint
+and key env var **in the judge entry itself**, so one panel can mix several
+hosts:
+
+```yaml
+eval:
+  judges:
+    - provider: fireworks
+      model: accounts/fireworks/models/deepseek-v3p1
+      role: primary
+    - provider: openai_compatible
+      model: kimi-k2-instruct
+      base_url: https://llm.example.com/v1
+      api_key_env: EXAMPLE_LLM_KEY
+      role: secondary
+```
+
+`base_url`/`api_key_env` are required for `openai_compatible` and rejected on
+every other provider (their endpoints are built in). A missing key env var
+fails loud at call time, naming the variable. Both providers send the exact
+request shape proven out on DeepSeek-via-Fireworks: non-reasoning calls pin
+`reasoning_effort: "none"`, `temperature: 0` and schema-constrained JSON-object
+mode; thinking calls omit temperature/response_format and pin the JSON shape
+via the prompt.
+
+Set the provider keys you use: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+`GEMINI_API_KEY`, `DEEPSEEK_API_KEY`, `FIREWORKS_API_KEY`. Base-URL overrides
+are **per provider** and each only redirects its own provider's traffic:
+`AI_GATEWAY_URL` (Anthropic), `OPENAI_BASE_URL` (OpenAI), `DEEPSEEK_BASE_URL`
+(DeepSeek), `FIREWORKS_BASE_URL` (Fireworks). There is no single variable that
+routes every provider through one gateway.
+
+> **Deprecated: the `DEEPSEEK_*` env-remap pattern.** Pointing
+> `DEEPSEEK_BASE_URL` at a non-native OpenAI-compatible host (e.g. Fireworks)
+> still works — non-reasoning judges send `reasoning_effort: "none"` and
+> schema-constrained JSON-object mode, while native DeepSeek calls (unset base
+> URL or `https://api.deepseek.com`) keep their unchanged shape. But it remaps
+> *every* deepseek judge at once through the environment, invisibly to the
+> spec. Prefer `provider: fireworks` (or `provider: openai_compatible` for
+> other hosts): same wire shape, declared in the spec frontmatter where it's
+> version-controlled and reviewable. Closes
+> [#16](https://github.com/collabb-innovations/hammurabi/issues/16).
 
 ## Deterministic (code-scored) criteria
 

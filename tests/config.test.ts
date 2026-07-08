@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  memberToJudgeConfig,
   resolveJudges,
   resolveAggregator,
   resolveRegressionThreshold,
@@ -55,6 +56,32 @@ test("resolveJudges lets an explicit override beat everything", () => {
   ]);
   assert.equal(judges.length, 1);
   assert.equal(judges[0].model, "claude-haiku-4-5");
+});
+
+test("memberToJudgeConfig carries base_url/api_key_env through for openai_compatible", () => {
+  const config = memberToJudgeConfig({
+    provider: "openai_compatible",
+    model: "kimi-k2-instruct",
+    role: "secondary",
+    base_url: "https://llm.example.com/v1",
+    api_key_env: "EXAMPLE_LLM_KEY",
+  });
+  assert.deepEqual(config, {
+    model: "kimi-k2-instruct",
+    provider: "openai_compatible",
+    role: "secondary",
+    baseUrl: "https://llm.example.com/v1",
+    apiKeyEnv: "EXAMPLE_LLM_KEY",
+  });
+});
+
+test("memberToJudgeConfig omits endpoint keys when the member has none", () => {
+  const config = memberToJudgeConfig({
+    provider: "fireworks",
+    model: "accounts/fireworks/models/deepseek-v3p1",
+  });
+  assert.equal("baseUrl" in config, false);
+  assert.equal("apiKeyEnv" in config, false);
 });
 
 test("resolveAggregator follows override > eval.aggregator > preset > mean", () => {
