@@ -7,6 +7,7 @@ import {
   isNonNativeDeepSeekHost,
   buildDeepSeekCompletionParams,
   parseJudgeJson,
+  JUDGE_JSON_SCHEMA,
 } from "../src/runner/providers.js";
 import type { JudgeCallRequest } from "../src/runner/providers.js";
 
@@ -54,6 +55,7 @@ test("DeepSeek native base URL with reasoning none omits reasoning_effort", () =
     assert.equal("reasoning_effort" in params, false);
     assert.equal(params.temperature, 0);
     assert.deepEqual(params.response_format, { type: "json_object" });
+    assert.equal("schema" in (params.response_format ?? {}), false);
   });
 });
 
@@ -63,7 +65,10 @@ test("DeepSeek custom base URL with reasoning none sends explicit reasoning_effo
 
     assert.equal(params.reasoning_effort, "none");
     assert.equal(params.temperature, 0);
-    assert.deepEqual(params.response_format, { type: "json_object" });
+    assert.deepEqual(params.response_format, {
+      type: "json_object",
+      schema: JUDGE_JSON_SCHEMA,
+    });
   });
 });
 

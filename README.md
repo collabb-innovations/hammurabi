@@ -176,6 +176,9 @@ When `DEEPSEEK_BASE_URL` points at a non-native OpenAI-compatible host such as
 Fireworks, non-reasoning DeepSeek judges send `reasoning_effort: "none"` along
 with `temperature: 0` and JSON-object mode. Native DeepSeek calls, including an
 unset base URL or `https://api.deepseek.com`, do not send that extra field.
+On those non-native hosts the JSON-object `response_format` also carries the
+judge JSON schema, enabling schema-constrained decoding so large judge prompts
+can't drop the `scores` wrapper.
 
 ## Deterministic (code-scored) criteria
 
