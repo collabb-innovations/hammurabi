@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.3.0
+
+Two new judge providers over one shared parameterized OpenAI-compatible
+client. No schema break — existing specs and baselines are a drop-in upgrade
+from 0.2.x. Closes #16.
+
+### Added
+
+- **Fireworks as a first-class judge provider** (`provider: fireworks`).
+  Defaults baked in: `https://api.fireworks.ai/inference/v1` (override with
+  `FIREWORKS_BASE_URL`), key from `FIREWORKS_API_KEY`. The frontmatter model
+  string reaches the wire verbatim (`accounts/fireworks/models/...`).
+- **Generic OpenAI-compatible judge provider** (`provider: openai_compatible`)
+  as the escape hatch for any other OpenAI-compatible host. Each judge entry
+  names its own `base_url` and `api_key_env` (both required for this provider,
+  rejected on every other), so one panel can mix hosts. The report's judges
+  audit trail records the entry's `base_url`.
+- Clients are cached per (base URL, key env var) — not a single singleton — and
+  a missing key env var fails loud, naming the variable.
+
+### Changed
+
+- The non-native-host DeepSeek request builder is extracted into a shared
+  `buildOpenAICompatibleParams` that both new providers and the
+  `DEEPSEEK_BASE_URL`-remap path delegate to, so the wire shape (explicit
+  `reasoning_effort: "none"` + schema-constrained JSON-object mode for
+  non-reasoning calls, prompt-pinned JSON for thinking calls) stays
+  byte-identical by construction. Native DeepSeek requests are unchanged.
+
+### Deprecated
+
+- Pointing `DEEPSEEK_BASE_URL` at a non-native host to reach Fireworks-style
+  serving. It still works, but prefer `provider: fireworks` /
+  `provider: openai_compatible` — same wire shape, declared in the spec
+  frontmatter instead of the environment.
+
 ## 0.2.2
 
 ### Fixed
