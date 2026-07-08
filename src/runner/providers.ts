@@ -4,6 +4,7 @@ import { client as anthropicClient } from "./client.js";
 import { zodOutputFormatV4 as zodOutputFormat } from "./zod-format.js";
 import { JudgeResponseSchema } from "./schema.js";
 import type { JudgeProvider, ReasoningEffort } from "../schema/spec.js";
+import type { ChatCompletionCreateParamsNonStreaming } from "openai/resources/chat/completions";
 
 /**
  * Provider-agnostic judge call. Each fixture's output is scored by one or more
@@ -26,6 +27,14 @@ export interface JudgeCallResponse {
 }
 
 const BASE_MAX_TOKENS = 16384;
+
+type DeepSeekCompletionParams = {
+  model: string;
+  messages: { role: "system" | "user"; content: string }[];
+  reasoning_effort?: "low" | "medium" | "high" | "none";
+  temperature?: number;
+  response_format?: { type: "json_object" };
+};
 
 // Hand-written so OpenAI's strict json_schema mode is satisfied without
 // coupling to any SDK's zod-version-specific schema helper.
@@ -166,6 +175,19 @@ function deepseek(): OpenAI {
 }
 
 async function callDeepSeek(req: JudgeCallRequest): Promise<JudgeCallResponse> {
+  const completion = await deepseek().chat.completions.create(
+    buildDeepSeekCompletionParams(
+      req,
+    ) as unknown as ChatCompletionCreateParamsNonStreaming,
+  );
+
+  const raw = completion.choices[0]?.message?.content ?? "";
+  return parseJudgeJson(raw, `DeepSeek judge ${req.model}`);
+}
+
+export function buildDeepSeekCompletionParams(
+  req: JudgeCallRequest,
+): DeepSeekCompletionParams {
   // DeepSeek follows OpenAI's wire format. Thinking is requested two ways and we
   // honor both: an intrinsically-reasoning model (the deepseek-reasoner alias)
   // OR a configured `reasoning` effort on a hybrid model (e.g. deepseek-v4-pro),
@@ -174,7 +196,7 @@ async function callDeepSeek(req: JudgeCallRequest): Promise<JudgeCallResponse> {
   // the JSON shape via the prompt (JSON_INSTRUCTION) and parse it back instead.
   const effort = reasoningToOpenAIEffort(req.reasoning);
   const reasoning = effort !== undefined || isReasoningModel(req.model);
-  const completion = await deepseek().chat.completions.create({
+  return {
     model: req.model,
     messages: [
       {
@@ -184,13 +206,13 @@ async function callDeepSeek(req: JudgeCallRequest): Promise<JudgeCallResponse> {
       { role: "user", content: req.userMessage },
     ],
     ...(effort ? { reasoning_effort: effort } : {}),
+    ...(!reasoning && isNonNativeDeepSeekHost()
+      ? { reasoning_effort: "none" as const }
+      : {}),
     ...(reasoning
       ? {}
       : { temperature: 0, response_format: { type: "json_object" } }),
-  });
-
-  const raw = completion.choices[0]?.message?.content ?? "";
-  return parseJudgeJson(raw, `DeepSeek judge ${req.model}`);
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -262,6 +284,13 @@ export function reasoningToOpenAIEffort(
 
 export function isReasoningModel(model: string): boolean {
   return /^o\d/i.test(model) || /^gpt-5/i.test(model) || /reason/i.test(model);
+}
+
+export function isNonNativeDeepSeekHost(
+  baseURL = process.env.DEEPSEEK_BASE_URL,
+): boolean {
+  if (!baseURL) return false;
+  return baseURL.replace(/\/+$/, "") !== "https://api.deepseek.com";
 }
 
 export function parseJudgeJson(raw: string, who: string): JudgeCallResponse {

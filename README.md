@@ -4,7 +4,7 @@
 
 [![npm](https://img.shields.io/npm/v/@collabb/hammurabi.svg)](https://www.npmjs.com/package/@collabb/hammurabi)
 
-**Status:** alpha (v0.2.0). On-disk loaders, CLI runner, a **multi-provider** judge panel (Anthropic + OpenAI + Google + DeepSeek) **configured in the spec frontmatter**, **deterministic code-scored criteria**, **baseline-aware exit semantics** (known-fail tier), **import-resolution preflight**, baseline regression detection, and a repo-wide `hammurabi-check` CI command are all shipped. Schemas use Zod v4.
+**Status:** alpha (v0.2.1). On-disk loaders, CLI runner, a **multi-provider** judge panel (Anthropic + OpenAI + Google + DeepSeek) **configured in the spec frontmatter**, **deterministic code-scored criteria**, **baseline-aware exit semantics** (known-fail tier), **import-resolution preflight**, baseline regression detection, and a repo-wide `hammurabi-check` CI command are all shipped. Schemas use Zod v4.
 
 ## Why
 
@@ -171,6 +171,11 @@ Set the provider keys you use: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
 each only redirects its own provider's traffic: `AI_GATEWAY_URL` (Anthropic),
 `OPENAI_BASE_URL` (OpenAI), `DEEPSEEK_BASE_URL` (DeepSeek). There is no single
 variable that routes every provider through one gateway.
+
+When `DEEPSEEK_BASE_URL` points at a non-native OpenAI-compatible host such as
+Fireworks, non-reasoning DeepSeek judges send `reasoning_effort: "none"` along
+with `temperature: 0` and JSON-object mode. Native DeepSeek calls, including an
+unset base URL or `https://api.deepseek.com`, do not send that extra field.
 
 ## Deterministic (code-scored) criteria
 

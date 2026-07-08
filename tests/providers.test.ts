@@ -4,8 +4,11 @@ import {
   reasoningToTokens,
   reasoningToOpenAIEffort,
   isReasoningModel,
+  isNonNativeDeepSeekHost,
+  buildDeepSeekCompletionParams,
   parseJudgeJson,
 } from "../src/runner/providers.js";
+import type { JudgeCallRequest } from "../src/runner/providers.js";
 
 test("reasoningToTokens maps named tiers and passes numbers through", () => {
   assert.equal(reasoningToTokens("none"), 0);
@@ -34,6 +37,46 @@ test("isReasoningModel recognizes o-series and gpt-5, not gpt-4o", () => {
   assert.equal(isReasoningModel("claude-sonnet-4-6"), false);
 });
 
+test("isNonNativeDeepSeekHost treats unset and native URLs as native", () => {
+  assert.equal(isNonNativeDeepSeekHost(undefined), false);
+  assert.equal(isNonNativeDeepSeekHost("https://api.deepseek.com"), false);
+  assert.equal(isNonNativeDeepSeekHost("https://api.deepseek.com/"), false);
+  assert.equal(
+    isNonNativeDeepSeekHost("https://api.fireworks.ai/inference/v1"),
+    true,
+  );
+});
+
+test("DeepSeek native base URL with reasoning none omits reasoning_effort", () => {
+  withDeepSeekBaseUrl(undefined, () => {
+    const params = buildDeepSeekCompletionParams(deepSeekRequest("none"));
+
+    assert.equal("reasoning_effort" in params, false);
+    assert.equal(params.temperature, 0);
+    assert.deepEqual(params.response_format, { type: "json_object" });
+  });
+});
+
+test("DeepSeek custom base URL with reasoning none sends explicit reasoning_effort none", () => {
+  withDeepSeekBaseUrl("https://api.fireworks.ai/inference/v1", () => {
+    const params = buildDeepSeekCompletionParams(deepSeekRequest("none"));
+
+    assert.equal(params.reasoning_effort, "none");
+    assert.equal(params.temperature, 0);
+    assert.deepEqual(params.response_format, { type: "json_object" });
+  });
+});
+
+test("DeepSeek custom base URL with reasoning low keeps thinking payload shape", () => {
+  withDeepSeekBaseUrl("https://api.fireworks.ai/inference/v1", () => {
+    const params = buildDeepSeekCompletionParams(deepSeekRequest("low"));
+
+    assert.equal(params.reasoning_effort, "low");
+    assert.equal("temperature" in params, false);
+    assert.equal("response_format" in params, false);
+  });
+});
+
 test("parseJudgeJson accepts valid JSON and strips code fences", () => {
   const raw = '```json\n{"scores":[{"criterionId":"a","score":1,"reasoning":"ok"}]}\n```';
   const out = parseJudgeJson(raw, "test");
@@ -55,3 +98,36 @@ test("parseJudgeJson throws when the shape fails validation", () => {
     /failed schema/,
   );
 });
+
+function deepSeekRequest(
+  reasoning: JudgeCallRequest["reasoning"],
+): JudgeCallRequest {
+  return {
+    provider: "deepseek",
+    model: "deepseek-v4-flash",
+    reasoning,
+    systemBlocks: [{ text: "Judge the output." }],
+    userMessage: "Input and output",
+  };
+}
+
+function withDeepSeekBaseUrl<T>(
+  value: string | undefined,
+  fn: () => T,
+): T {
+  const previous = process.env.DEEPSEEK_BASE_URL;
+  try {
+    if (value === undefined) {
+      delete process.env.DEEPSEEK_BASE_URL;
+    } else {
+      process.env.DEEPSEEK_BASE_URL = value;
+    }
+    return fn();
+  } finally {
+    if (previous === undefined) {
+      delete process.env.DEEPSEEK_BASE_URL;
+    } else {
+      process.env.DEEPSEEK_BASE_URL = previous;
+    }
+  }
+}

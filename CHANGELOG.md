@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.1
+
+A targeted DeepSeek compatibility patch for OpenAI-compatible hosts that serve
+thinking-by-default models.
+
+### Fixed
+
+- DeepSeek judges now send `reasoning_effort: "none"` for non-reasoning calls
+  only when `DEEPSEEK_BASE_URL` points at a non-native host, keeping native
+  DeepSeek API requests unchanged while disabling default thinking on Fireworks.
+  Fixes #17.
+
 ## 0.2.0
 
 A minor release adding a fourth judge provider. No schema break — existing
