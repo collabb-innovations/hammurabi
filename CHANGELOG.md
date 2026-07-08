@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2
+
+### Fixed
+
+- DeepSeek judge on non-native hosts: schema-constrained decoding — response_format now carries the judge JSON schema (follow-up to #17/#18; v0.2.1's reasoning_effort none reduced wrong-shape votes 12/36 → 7/36 on hook.'s LP panels; a captured 123k-char failing request replayed 5/5 valid with the schema attached, 2026-07-08).
+
 ## 0.2.1
 
 A targeted DeepSeek compatibility patch for OpenAI-compatible hosts that serve

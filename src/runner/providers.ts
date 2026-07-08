@@ -33,12 +33,12 @@ type DeepSeekCompletionParams = {
   messages: { role: "system" | "user"; content: string }[];
   reasoning_effort?: "low" | "medium" | "high" | "none";
   temperature?: number;
-  response_format?: { type: "json_object" };
+  response_format?: { type: "json_object"; schema?: typeof JUDGE_JSON_SCHEMA };
 };
 
 // Hand-written so OpenAI's strict json_schema mode is satisfied without
 // coupling to any SDK's zod-version-specific schema helper.
-const JUDGE_JSON_SCHEMA = {
+export const JUDGE_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
@@ -209,9 +209,17 @@ export function buildDeepSeekCompletionParams(
     ...(!reasoning && isNonNativeDeepSeekHost()
       ? { reasoning_effort: "none" as const }
       : {}),
+    // Non-native hosts support schema-constrained decoding via response_format
+    // .schema — without it, large judge prompts stochastically drop the scores
+    // wrapper. Native DeepSeek stays bare json_object.
     ...(reasoning
       ? {}
-      : { temperature: 0, response_format: { type: "json_object" } }),
+      : {
+          temperature: 0,
+          response_format: isNonNativeDeepSeekHost()
+            ? { type: "json_object" as const, schema: JUDGE_JSON_SCHEMA }
+            : { type: "json_object" as const },
+        }),
   };
 }
 
