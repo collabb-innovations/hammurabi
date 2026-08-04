@@ -58,6 +58,26 @@ function assertConsistency(
       `fixtures.specVersion "${fixtures.specVersion}" != spec.version "${spec.frontmatter.version}"`,
     );
   }
+  // An `appliesTo` tag no fixture carries disables that criterion across the
+  // whole bundle, and the run still comes back green — a silently-disabled
+  // criterion is indistinguishable from a passing one. Caught at load time,
+  // where a typo is still cheap.
+  const fixtureTags = new Set(fixtures.fixtures.flatMap((f) => f.tags ?? []));
+  for (const c of rubric.criteria) {
+    const unmatched = (c.appliesTo ?? []).filter((t) => !fixtureTags.has(t));
+    if (unmatched.length === (c.appliesTo?.length ?? 0) && unmatched.length > 0) {
+      mismatches.push(
+        `criterion "${c.id}" appliesTo [${unmatched.join(", ")}], but no fixture ` +
+          `carries any of those tags — the criterion would never be scored`,
+      );
+    } else if (unmatched.length > 0) {
+      console.warn(
+        `[hammurabi] criterion '${c.id}' appliesTo tag(s) [${unmatched.join(", ")}] ` +
+          `match no fixture in this bundle`,
+      );
+    }
+  }
+
   if (mismatches.length > 0) {
     throw new Error(
       `Bundle inconsistency:\n  - ${mismatches.join("\n  - ")}`,

@@ -39,6 +39,7 @@ From the refined spec, produce `<spec-name>.rubric.json` matching the `Rubric` t
 
 - 3–7 criteria. Each has: `id` (kebab-case), `name`, `description`, `weight` (sums to 1.0), `scale` (pass-fail or ordinal min/max), optional `judgePrompt` (per-criterion instructions the judge actually receives — use it to disambiguate tricky scoring).
 - Set `passThreshold` based on the spec's tolerance for failure.
+- **Every criterion must apply to every fixture it will be scored on.** If the target emits more than one output shape (a success and an error; several ops behind one entry point), a criterion written for one of them has nothing to say about the others — and a judge shown output it cannot evaluate grades it low rather than abstaining, no matter how the description is worded. Give such a criterion an `appliesTo: ["<tag>"]` and tag the fixtures to match (Step 4). If the criteria fall into disjoint groups over disjoint fixtures, prefer splitting into two bundles: that is usually two behaviours.
 
 Show the rubric to the user. Ask: which criteria are missing? Which weights are wrong? Iterate until accepted.
 

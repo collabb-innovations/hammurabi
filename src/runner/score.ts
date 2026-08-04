@@ -7,6 +7,17 @@ import type {
   ReportSummary,
 } from "../schema/report.js";
 
+/**
+ * Fold a fixture's criterion scores into one weighted score.
+ *
+ * The score is renormalised over the weight actually in play — the criteria
+ * that were scored — rather than assumed to be out of 1.0. For a conformant
+ * rubric where every criterion applies, the weights sum to 1 and this is
+ * exactly the previous arithmetic. It matters when a criterion sat out via
+ * `appliesTo`: a fixture where 3 of 6 criteria apply must be scored out of
+ * those 3, not divided by weight that was never in play. Without this, an
+ * inapplicable criterion is indistinguishable from one that scored 0.
+ */
 export function scoreFixture(
   scores: CriterionScore[],
   rubric: Rubric,
@@ -20,14 +31,15 @@ export function scoreFixture(
     weightedSum += normalizeScore(s.score, criterion) * criterion.weight;
     totalWeight += criterion.weight;
   }
-  if (Math.abs(totalWeight - 1) > 0.01) {
-    console.warn(
-      `[hammurabi] rubric for spec '${rubric.specName}' has criterion weights summing to ${totalWeight.toFixed(3)} (expected 1.0)`,
-    );
+  // Nothing applied: there is no evidence either way, so no score to report.
+  // The caller decides whether that is an authoring error (it usually is).
+  if (totalWeight === 0) {
+    return { weightedScore: 0, passed: false };
   }
+  const weightedScore = weightedSum / totalWeight;
   return {
-    weightedScore: weightedSum,
-    passed: weightedSum >= rubric.passThreshold,
+    weightedScore,
+    passed: weightedScore >= rubric.passThreshold,
   };
 }
 

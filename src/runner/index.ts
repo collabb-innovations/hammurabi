@@ -8,6 +8,7 @@ import { executeFixture } from "./execute.js";
 import { scoreCodeCriterion } from "./deterministic.js";
 import { judgeFixturePanel } from "./judge.js";
 import { computeRegressions, scoreFixture, summarize } from "./score.js";
+import { partitionByApplicability } from "./applicability.js";
 import type { JudgeConfig, RunOptions } from "./types.js";
 import type { Spec } from "../schema/spec.js";
 
@@ -49,12 +50,42 @@ export async function run(options: RunOptions): Promise<Report> {
       });
       continue;
     }
+    // A criterion restricted by `appliesTo` sits out the fixtures it does not
+    // cover: not judged, not scored, not in the denominator. This runs before
+    // the code/llm split so an inapplicable judged criterion costs no panel
+    // call, which is most of the point.
+    const { applicable, inapplicable } = partitionByApplicability(
+      options.rubric.criteria,
+      fixture,
+    );
+    const inapplicableIds = inapplicable.map((c) => c.id);
+    const withInapplicable =
+      inapplicableIds.length > 0 ? { inapplicable: inapplicableIds } : {};
+
+    if (applicable.length === 0) {
+      // Every criterion excluded itself. Nothing was measured, so a pass would
+      // be vacuous — report it errored, the same way an unscoreable fixture is.
+      results.push({
+        fixtureId: fixture.id,
+        output,
+        ...(fixture.tags ? { tags: fixture.tags } : {}),
+        ...withInapplicable,
+        scores: [],
+        weightedScore: 0,
+        passed: false,
+        error:
+          `no criterion applies to this fixture: every criterion restricts itself ` +
+          `via appliesTo and none matches its tags [${(fixture.tags ?? []).join(", ")}]`,
+      });
+      continue;
+    }
+
     // Code-scored criteria run deterministically; LLM criteria go to the
     // panel. A misconfigured code evaluator errors the whole fixture.
-    const codeCriteria = options.rubric.criteria.filter(
+    const codeCriteria = applicable.filter(
       (c) => c.evaluator?.kind === "code",
     );
-    const llmCriteria = options.rubric.criteria.filter(
+    const llmCriteria = applicable.filter(
       (c) => (c.evaluator?.kind ?? "llm") === "llm",
     );
 
@@ -68,6 +99,7 @@ export async function run(options: RunOptions): Promise<Report> {
         fixtureId: fixture.id,
         output,
         ...(fixture.tags ? { tags: fixture.tags } : {}),
+        ...withInapplicable,
         scores: [],
         weightedScore: 0,
         passed: false,
@@ -99,6 +131,7 @@ export async function run(options: RunOptions): Promise<Report> {
         fixtureId: fixture.id,
         output,
         ...(fixture.tags ? { tags: fixture.tags } : {}),
+        ...withInapplicable,
         scores: [...codeScores, ...llmScores],
         weightedScore: 0,
         passed: false,
@@ -111,7 +144,7 @@ export async function run(options: RunOptions): Promise<Report> {
     const byId = new Map(
       [...codeScores, ...llmScores].map((s) => [s.criterionId, s]),
     );
-    const scores = options.rubric.criteria
+    const scores = applicable
       .map((c) => byId.get(c.id))
       .filter((s): s is CriterionScore => s !== undefined);
 
@@ -120,6 +153,7 @@ export async function run(options: RunOptions): Promise<Report> {
       fixtureId: fixture.id,
       output,
       ...(fixture.tags ? { tags: fixture.tags } : {}),
+      ...withInapplicable,
       scores,
       weightedScore,
       passed,

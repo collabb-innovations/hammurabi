@@ -243,6 +243,58 @@ The export receives `{ input, expected, output, fixture }` and returns a number
 or `{ score, reasoning }` in the criterion's scale. LLM and code criteria mix
 freely in one rubric; a rubric with no LLM criteria makes zero API calls.
 
+## Scoping a criterion to some fixtures — `appliesTo`
+
+Some targets emit more than one shape: a success response and an error
+response, or several ops behind one CLI. A criterion written for one of them
+has nothing to say about the others, and there is no good way to express that
+in prose. Ask a judge to abstain and it does so unreliably — judges
+intermittently score 0 while their own reasoning says the rule calls for a
+pass. Don't ask, and the criterion grades output it was never meant to see,
+consistently low.
+
+`appliesTo` says it in the rubric instead. A criterion listing tags applies
+only to fixtures carrying at least one of them:
+
+```json
+{
+  "id": "partition-integrity",
+  "name": "Every parsed seed lands in exactly one bucket",
+  "weight": 0.2,
+  "scale": { "kind": "ordinal", "min": 0, "max": 1 },
+  "appliesTo": ["collect"]
+}
+```
+
+```jsonl
+{"id": "parses-a-listing",  "input": {...}, "tags": ["parse"]}
+{"id": "collects-a-page",   "input": {...}, "tags": ["collect"]}
+```
+
+Omit `appliesTo` and the criterion applies to every fixture — the default, and
+what every existing rubric does.
+
+An inapplicable criterion is dropped before scoring: **no judge call is made**,
+and the fixture's weighted score is renormalised over the criteria that do
+apply. That renormalisation is the point. Weights sum to 1.0 across the whole
+rubric, so without it a fixture where 3 of 6 criteria apply is divided by
+weight that was never in play, and a perfect answer caps at 0.5.
+
+Two things it is deliberately not:
+
+- **Not omission.** A judge declining to score is a malfunction — excluded from
+  the aggregate, and a criterion no judge scored errors the fixture. That
+  loudness is right for "cannot evaluate" and wrong for "does not apply".
+  Inapplicable criteria are listed in each `FixtureResult.inapplicable` and
+  rendered in the report, so sitting out is visible rather than merely absent.
+- **Not a substitute for splitting a bundle.** If a rubric's criteria fall into
+  disjoint groups over disjoint fixtures, that is usually two behaviours and
+  two bundles. `appliesTo` is for the criteria that genuinely straddle one.
+
+An `appliesTo` tag no fixture in the bundle carries is a load-time error — a
+typo would otherwise disable the criterion everywhere while the run stays
+green, which reads exactly like coverage.
+
 ## Runner
 
 ```ts

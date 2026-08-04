@@ -19,6 +19,13 @@ export interface FixtureResult {
   output: unknown;
   tags?: string[];
   scores: CriterionScore[];
+  /**
+   * Criteria that declared themselves inapplicable to this fixture via
+   * `Criterion.appliesTo`. They were not judged and are not in the weighted
+   * score. Recorded so a criterion sitting out is visible in the report rather
+   * than merely absent — absent is how a silently-disabled criterion looks.
+   */
+  inapplicable?: string[];
   weightedScore: number;
   passed: boolean;
   error?: string;
