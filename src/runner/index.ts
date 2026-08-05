@@ -8,8 +8,10 @@ import { executeFixture } from "./execute.js";
 import { scoreCodeCriterion } from "./deterministic.js";
 import { judgeFixturePanel } from "./judge.js";
 import { computeRegressions, scoreFixture, summarize } from "./score.js";
+import { partitionByApplicability } from "./applicability.js";
 import type { JudgeConfig, RunOptions } from "./types.js";
 import type { Spec } from "../schema/spec.js";
+import type { Rubric } from "../schema/rubric.js";
 
 export type { Aggregator, JudgeConfig, RunOptions } from "./types.js";
 export {
@@ -29,6 +31,7 @@ export async function run(options: RunOptions): Promise<Report> {
   const judges = resolveJudges(options.spec, options.judges);
   const aggregator = resolveAggregator(options.spec, options.aggregator);
   warnSameProviderJudges(options.spec, judges);
+  warnNonConformantWeights(options.rubric);
   const results: FixtureResult[] = [];
 
   for (const fixture of options.fixtures.fixtures) {
@@ -49,12 +52,42 @@ export async function run(options: RunOptions): Promise<Report> {
       });
       continue;
     }
+    // A criterion restricted by `appliesTo` sits out the fixtures it does not
+    // cover: not judged, not scored, not in the denominator. This runs before
+    // the code/llm split so an inapplicable judged criterion costs no panel
+    // call, which is most of the point.
+    const { applicable, inapplicable } = partitionByApplicability(
+      options.rubric.criteria,
+      fixture,
+    );
+    const inapplicableIds = inapplicable.map((c) => c.id);
+    const withInapplicable =
+      inapplicableIds.length > 0 ? { inapplicable: inapplicableIds } : {};
+
+    if (applicable.length === 0) {
+      // Every criterion excluded itself. Nothing was measured, so a pass would
+      // be vacuous — report it errored, the same way an unscoreable fixture is.
+      results.push({
+        fixtureId: fixture.id,
+        output,
+        ...(fixture.tags ? { tags: fixture.tags } : {}),
+        ...withInapplicable,
+        scores: [],
+        weightedScore: 0,
+        passed: false,
+        error:
+          `no criterion applies to this fixture: every criterion restricts itself ` +
+          `via appliesTo and none matches its tags [${(fixture.tags ?? []).join(", ")}]`,
+      });
+      continue;
+    }
+
     // Code-scored criteria run deterministically; LLM criteria go to the
     // panel. A misconfigured code evaluator errors the whole fixture.
-    const codeCriteria = options.rubric.criteria.filter(
+    const codeCriteria = applicable.filter(
       (c) => c.evaluator?.kind === "code",
     );
-    const llmCriteria = options.rubric.criteria.filter(
+    const llmCriteria = applicable.filter(
       (c) => (c.evaluator?.kind ?? "llm") === "llm",
     );
 
@@ -68,6 +101,7 @@ export async function run(options: RunOptions): Promise<Report> {
         fixtureId: fixture.id,
         output,
         ...(fixture.tags ? { tags: fixture.tags } : {}),
+        ...withInapplicable,
         scores: [],
         weightedScore: 0,
         passed: false,
@@ -99,6 +133,7 @@ export async function run(options: RunOptions): Promise<Report> {
         fixtureId: fixture.id,
         output,
         ...(fixture.tags ? { tags: fixture.tags } : {}),
+        ...withInapplicable,
         scores: [...codeScores, ...llmScores],
         weightedScore: 0,
         passed: false,
@@ -111,7 +146,7 @@ export async function run(options: RunOptions): Promise<Report> {
     const byId = new Map(
       [...codeScores, ...llmScores].map((s) => [s.criterionId, s]),
     );
-    const scores = options.rubric.criteria
+    const scores = applicable
       .map((c) => byId.get(c.id))
       .filter((s): s is CriterionScore => s !== undefined);
 
@@ -120,6 +155,7 @@ export async function run(options: RunOptions): Promise<Report> {
       fixtureId: fixture.id,
       output,
       ...(fixture.tags ? { tags: fixture.tags } : {}),
+      ...withInapplicable,
       scores,
       weightedScore,
       passed,
@@ -161,6 +197,32 @@ export async function run(options: RunOptions): Promise<Report> {
  * "sounds like" its own generation more favorably. If the spec declares the
  * generator's provider, warn when any judge shares it.
  */
+/**
+ * Warn once per run when a rubric's criterion weights do not sum to 1.0.
+ *
+ * `scoreFixture` renormalises over the weight actually scored, so a rubric
+ * whose weights sum to 0.8 now scores out of 0.8 rather than out of 1.0 — a
+ * fixture that used to cap at 0.8 can cross a 0.9 threshold and pass. That is
+ * the correct arithmetic, but it is a silent change in gate outcome, so it
+ * should not be silent.
+ *
+ * `parseRubric` runs the same check at load, but callers that build a Rubric
+ * programmatically and call `run()` directly never go through it. This is the
+ * backstop for those. Deliberately once per run, not once per fixture: it is a
+ * property of the rubric, not of any fixture.
+ */
+function warnNonConformantWeights(rubric: Rubric): void {
+  const total = rubric.criteria.reduce((sum, c) => sum + c.weight, 0);
+  if (Math.abs(total - 1) > 0.01) {
+    console.warn(
+      `[hammurabi] rubric for spec '${rubric.specName}' has criterion weights ` +
+        `summing to ${total.toFixed(3)} (expected 1.0) — fixture scores are ` +
+        `renormalised over the weight actually scored, so thresholds apply to a ` +
+        `different scale than the weights suggest.`,
+    );
+  }
+}
+
 function warnSameProviderJudges(spec: Spec, judges: JudgeConfig[]): void {
   const generator = spec.frontmatter.eval?.generatorProvider;
   if (!generator) return;

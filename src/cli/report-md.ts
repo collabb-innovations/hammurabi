@@ -76,6 +76,14 @@ function renderFixtureDetail(report: Report, r: FixtureResult): string {
     return `| ${cell(s.criterionId)} | ${weight} | ${s.score.toFixed(2)} | ${notes} |`;
   });
 
+  // Criteria that sat this fixture out. Shown, not omitted: a criterion missing
+  // from the table is how a silently-disabled one looks too.
+  const inapplicableRows = (r.inapplicable ?? []).map((id) => {
+    const c = report.criteria.find((cr) => cr.id === id);
+    const weight = c ? c.weight.toFixed(2) : "?";
+    return `| ${cell(id)} | ${weight} | — | does not apply to this fixture |`;
+  });
+
   const voteSections = r.scores
     .map((s) => {
       const lines = s.judgeVotes
@@ -96,6 +104,7 @@ function renderFixtureDetail(report: Report, r: FixtureResult): string {
     "| Criterion | Weight | Score | Notes |",
     "|---|---:|---:|---|",
     ...criterionRows,
+    ...inapplicableRows,
     "",
     "<details>",
     "<summary>Judge votes</summary>",

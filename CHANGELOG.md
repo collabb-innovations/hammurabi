@@ -1,5 +1,56 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`Criterion.appliesTo`** — scope a criterion to fixtures carrying at least
+  one of the named tags. Omitted ⇒ applies to everything, which is what every
+  existing rubric does, so this is a drop-in upgrade. Inapplicable criteria are
+  dropped before scoring: no judge call, not in the weighted score, and listed
+  in `FixtureResult.inapplicable` so the report shows them sitting out.
+  `Fixture.tags` already existed and was carried into the report but never read
+  by the runner; this is what reads it.
+- `criterionApplies`, `partitionByApplicability` and `referencedTags` exported
+  from the package root for callers that mirror the runner's filtering.
+- Load-time error when a criterion's `appliesTo` matches no fixture in the
+  bundle (a warning when it matches only some of the listed tags). A typo there
+  silently disables the criterion everywhere while the gate stays green.
+
+### Changed
+
+- **A fixture's weighted score is renormalised over the criteria that were
+  scored** rather than assumed to be out of 1.0. For a conformant rubric —
+  weights summing to 1, every criterion applying — this is arithmetically
+  identical to before. It matters when a criterion sits out via `appliesTo`: a
+  fixture where 3 of 6 criteria apply must be scored out of those 3, or a
+  perfect answer caps at 0.5.
+- A fixture that no criterion applies to is reported as **errored** rather than
+  scored. Nothing was measured, so a pass would be vacuous.
+- The per-fixture "criterion weights summing to N" warning is removed from
+  `scoreFixture`. It fired once per fixture for a property of the rubric, and
+  under `appliesTo` it would fire whenever a criterion legitimately sat out.
+  The same check still runs once, at rubric load, and now also once per run in
+  `run()` for callers that build a `Rubric` programmatically and never go
+  through `parseRubric`.
+
+### Upgrade note — non-conformant rubrics change score
+
+Renormalisation is a no-op only for rubrics whose weights sum to 1.0. **If your
+weights sum to anything else, fixture scores change and gates can flip.** A
+rubric whose weights sum to 0.8, with every criterion scoring perfectly against
+a `passThreshold` of 0.9:
+
+| | weighted score | outcome |
+|---|---|---|
+| 0.3.0 | 0.80 | fail |
+| this release | 1.00 | **pass** |
+
+The new value is the correct one — the old behaviour scored fixtures against
+weight that was never in play. But it is a silent change in gate outcome for an
+already-malformed rubric, so `run()` now warns when weights do not sum to 1.0.
+Check that warning before upgrading a gate you rely on.
+
 ## 0.3.0
 
 Two new judge providers over one shared parameterized OpenAI-compatible

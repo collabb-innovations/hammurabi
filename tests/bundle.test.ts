@@ -109,3 +109,61 @@ test("loadAll accepts explicit paths", async () => {
   );
   assert.equal(b.spec.frontmatter.name, "foo");
 });
+
+// --- appliesTo tag validation ----------------------------------------------
+
+/** Write a bundle whose single criterion restricts itself, over tagged fixtures. */
+async function writeAppliesToBundle(appliesTo: string[], fixtureTags: string[][]) {
+  const dir = await mkdtemp(join(tmpdir(), "hammurabi-appliesto-"));
+  const specPath = join(dir, "foo.spec.md");
+  await writeFile(specPath, specBody);
+  await writeFile(
+    join(dir, "foo.rubric.json"),
+    JSON.stringify({
+      ...rubric,
+      criteria: [
+        { ...rubric.criteria[0], weight: 0.5 },
+        {
+          id: "c2",
+          name: "C2",
+          description: "x",
+          weight: 0.5,
+          scale: { kind: "pass-fail" },
+          appliesTo,
+        },
+      ],
+    }),
+  );
+  const lines = [`{"specName":"foo","specVersion":"1.0.0"}`].concat(
+    fixtureTags.map((tags, i) =>
+      JSON.stringify({ id: `f${i}`, input: "x", tags }),
+    ),
+  );
+  await writeFile(join(dir, "foo.fixtures.jsonl"), lines.join("\n") + "\n");
+  return specPath;
+}
+
+test("loadBundle accepts an appliesTo tag some fixture carries", async () => {
+  const specPath = await writeAppliesToBundle(["parse"], [["parse"], ["collect"]]);
+  const b = await loadBundle(specPath);
+  assert.deepEqual(b.rubric.criteria[1]!.appliesTo, ["parse"]);
+});
+
+test("loadBundle rejects an appliesTo tag no fixture carries", async () => {
+  // A typo here disables the criterion across the whole bundle, and the run
+  // still comes back green — indistinguishable from coverage.
+  const specPath = await writeAppliesToBundle(["pares"], [["parse"], ["collect"]]);
+  await assert.rejects(
+    () => loadBundle(specPath),
+    /appliesTo \[pares\], but no fixture carries any of those tags/,
+  );
+});
+
+test("loadBundle allows a partly-matched appliesTo (warns, does not throw)", async () => {
+  const specPath = await writeAppliesToBundle(
+    ["parse", "someday"],
+    [["parse"], ["collect"]],
+  );
+  const b = await loadBundle(specPath);
+  assert.deepEqual(b.rubric.criteria[1]!.appliesTo, ["parse", "someday"]);
+});

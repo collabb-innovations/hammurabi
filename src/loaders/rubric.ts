@@ -35,6 +35,9 @@ export const CriterionSchema = z
     scale: CriterionScaleSchema,
     judgePrompt: z.string().optional(),
     evaluator: CriterionEvaluatorSchema.optional(),
+    // Non-empty: `"appliesTo": []` would mean "applies to nothing", which is a
+    // criterion that can never score. Omit the field to apply to everything.
+    appliesTo: z.array(z.string().min(1)).min(1).optional(),
   })
   .strict();
 

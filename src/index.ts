@@ -2,6 +2,11 @@ export * from "./schema/index.js";
 export { run } from "./runner/index.js";
 export type { Aggregator, JudgeConfig, RunOptions } from "./runner/index.js";
 export {
+  criterionApplies,
+  partitionByApplicability,
+  referencedTags,
+} from "./runner/applicability.js";
+export {
   parseSpec,
   loadSpec,
   parseRubric,
