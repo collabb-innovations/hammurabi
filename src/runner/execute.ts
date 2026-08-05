@@ -53,6 +53,23 @@ function executeCli(command: string, input: unknown): Promise<ExecuteResult> {
       }
       resolve({ output: tryParseJson(stdout) });
     });
+    // A target may exit before draining stdin — a usage error, --help, an
+    // arg-validation guard, or anything that fails fast. The read end of the
+    // pipe closes and this write lands on a dead pipe (EPIPE). That is a
+    // legitimate target behaviour, not a runner failure: the `close` handler
+    // above already reports the exit code and whatever the target printed.
+    //
+    // Without a handler here, the stream's `error` event goes unhandled, which
+    // THROWS and escapes this promise entirely — so a fixture that should
+    // report `cli exited N` takes down the run instead. Only EPIPE is
+    // swallowed; anything else still surfaces as a fixture error.
+    proc.stdin?.on("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "EPIPE") return;
+      resolve({
+        output: null,
+        error: `failed writing fixture input to stdin: ${err.message}`,
+      });
+    });
     proc.stdin?.write(JSON.stringify(input));
     proc.stdin?.end();
   });
