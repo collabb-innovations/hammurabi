@@ -124,3 +124,40 @@ test("run() is unchanged when no criterion declares appliesTo", async () => {
     assert.equal(r.weightedScore, 0.5);
   }
 });
+
+/**
+ * The per-fixture weight-sum warning moved out of `scoreFixture`. `parseRubric`
+ * still catches malformed rubrics loaded from disk, but a caller that builds a
+ * Rubric in code and calls `run()` bypasses it entirely — and renormalisation
+ * makes a non-conformant rubric score differently rather than merely oddly.
+ */
+test("run() warns once when criterion weights do not sum to 1.0", async () => {
+  const skewed: Rubric = {
+    ...rubric,
+    criteria: [codeCriterion("a", 0.4), codeCriterion("b", 0.4)],
+  };
+  const warnings: string[] = [];
+  const original = console.warn;
+  console.warn = (...args: unknown[]) => void warnings.push(String(args[0]));
+  try {
+    await run({ spec, rubric: skewed, fixtures, execute });
+  } finally {
+    console.warn = original;
+  }
+
+  const weightWarnings = warnings.filter((w) => w.includes("weights"));
+  assert.equal(weightWarnings.length, 1, "once per run, not once per fixture");
+  assert.match(weightWarnings[0]!, /summing to 0\.800/);
+});
+
+test("run() does not warn when weights are conformant", async () => {
+  const warnings: string[] = [];
+  const original = console.warn;
+  console.warn = (...args: unknown[]) => void warnings.push(String(args[0]));
+  try {
+    await run({ spec, rubric, fixtures, execute });
+  } finally {
+    console.warn = original;
+  }
+  assert.equal(warnings.filter((w) => w.includes("weights")).length, 0);
+});

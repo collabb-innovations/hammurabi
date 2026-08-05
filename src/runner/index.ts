@@ -11,6 +11,7 @@ import { computeRegressions, scoreFixture, summarize } from "./score.js";
 import { partitionByApplicability } from "./applicability.js";
 import type { JudgeConfig, RunOptions } from "./types.js";
 import type { Spec } from "../schema/spec.js";
+import type { Rubric } from "../schema/rubric.js";
 
 export type { Aggregator, JudgeConfig, RunOptions } from "./types.js";
 export {
@@ -30,6 +31,7 @@ export async function run(options: RunOptions): Promise<Report> {
   const judges = resolveJudges(options.spec, options.judges);
   const aggregator = resolveAggregator(options.spec, options.aggregator);
   warnSameProviderJudges(options.spec, judges);
+  warnNonConformantWeights(options.rubric);
   const results: FixtureResult[] = [];
 
   for (const fixture of options.fixtures.fixtures) {
@@ -195,6 +197,32 @@ export async function run(options: RunOptions): Promise<Report> {
  * "sounds like" its own generation more favorably. If the spec declares the
  * generator's provider, warn when any judge shares it.
  */
+/**
+ * Warn once per run when a rubric's criterion weights do not sum to 1.0.
+ *
+ * `scoreFixture` renormalises over the weight actually scored, so a rubric
+ * whose weights sum to 0.8 now scores out of 0.8 rather than out of 1.0 — a
+ * fixture that used to cap at 0.8 can cross a 0.9 threshold and pass. That is
+ * the correct arithmetic, but it is a silent change in gate outcome, so it
+ * should not be silent.
+ *
+ * `parseRubric` runs the same check at load, but callers that build a Rubric
+ * programmatically and call `run()` directly never go through it. This is the
+ * backstop for those. Deliberately once per run, not once per fixture: it is a
+ * property of the rubric, not of any fixture.
+ */
+function warnNonConformantWeights(rubric: Rubric): void {
+  const total = rubric.criteria.reduce((sum, c) => sum + c.weight, 0);
+  if (Math.abs(total - 1) > 0.01) {
+    console.warn(
+      `[hammurabi] rubric for spec '${rubric.specName}' has criterion weights ` +
+        `summing to ${total.toFixed(3)} (expected 1.0) — fixture scores are ` +
+        `renormalised over the weight actually scored, so thresholds apply to a ` +
+        `different scale than the weights suggest.`,
+    );
+  }
+}
+
 function warnSameProviderJudges(spec: Spec, judges: JudgeConfig[]): void {
   const generator = spec.frontmatter.eval?.generatorProvider;
   if (!generator) return;

@@ -30,7 +30,26 @@
 - The per-fixture "criterion weights summing to N" warning is removed from
   `scoreFixture`. It fired once per fixture for a property of the rubric, and
   under `appliesTo` it would fire whenever a criterion legitimately sat out.
-  The same check still runs once, at rubric load.
+  The same check still runs once, at rubric load, and now also once per run in
+  `run()` for callers that build a `Rubric` programmatically and never go
+  through `parseRubric`.
+
+### Upgrade note — non-conformant rubrics change score
+
+Renormalisation is a no-op only for rubrics whose weights sum to 1.0. **If your
+weights sum to anything else, fixture scores change and gates can flip.** A
+rubric whose weights sum to 0.8, with every criterion scoring perfectly against
+a `passThreshold` of 0.9:
+
+| | weighted score | outcome |
+|---|---|---|
+| 0.3.0 | 0.80 | fail |
+| this release | 1.00 | **pass** |
+
+The new value is the correct one — the old behaviour scored fixtures against
+weight that was never in play. But it is a silent change in gate outcome for an
+already-malformed rubric, so `run()` now warns when weights do not sum to 1.0.
+Check that warning before upgrading a gate you rely on.
 
 ## 0.3.0
 
