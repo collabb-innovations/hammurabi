@@ -107,3 +107,26 @@ test("cli target reports a non-zero exit code as an error", async () => {
   const { error } = await executeFixture(target, "x");
   assert.match(error ?? "", /cli exited 7/);
 });
+
+/**
+ * A target that exits without draining stdin leaves the runner writing to a
+ * dead pipe. The one-byte case ("x" above) is a race the write usually wins,
+ * which is why it only failed intermittently (#25). An input larger than the
+ * OS pipe buffer cannot be absorbed by a departed reader, so this pins the
+ * failure deterministically: without an `error` handler on stdin, the EPIPE is
+ * unhandled, throws, and escapes executeCli's promise entirely.
+ */
+test("cli target that exits without reading stdin still reports its exit code", async () => {
+  const target: SpecTarget = { kind: "cli", command: "exit 7" };
+  // Comfortably past the 64KiB pipe buffer.
+  const bigInput = "y".repeat(1_000_000);
+  const { error } = await executeFixture(target, bigInput);
+  assert.match(error ?? "", /cli exited 7/);
+});
+
+test("cli target that ignores stdin but succeeds still returns its output", async () => {
+  const target: SpecTarget = { kind: "cli", command: "echo '\"done\"'" };
+  const { output, error } = await executeFixture(target, "z".repeat(1_000_000));
+  assert.equal(error, undefined);
+  assert.equal(output, "done");
+});
