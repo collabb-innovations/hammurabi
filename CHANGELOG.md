@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
+
+Criteria can now declare which fixtures they cover. Minor rather than patch:
+new schema surface, a new report field, a new load-time error, and a scoring
+change that can flip a gate on a malformed rubric — see the upgrade note below.
+
+Thanks to [@ajaleman119](https://github.com/ajaleman119), who hit the gap in
+their own eval loop, measured it, and contributed `appliesTo` (#22, #23).
 
 ### Added
 
@@ -33,6 +40,16 @@
   The same check still runs once, at rubric load, and now also once per run in
   `run()` for callers that build a `Rubric` programmatically and never go
   through `parseRubric`.
+
+### Fixed
+
+- **A `cli` target that exits without draining stdin no longer takes down the
+  run.** `executeCli` wrote fixture input to the child's stdin with no `error`
+  handler, so when the child closed the pipe first the resulting EPIPE went
+  unhandled, threw, and escaped the promise — the exit code was never reported.
+  This affected any target that ignores stdin, including successful ones
+  (`--help`, arg-validation guards, fast-fail paths). Only EPIPE is swallowed;
+  other stdin errors now surface as a fixture error. (#25, #26)
 
 ### Upgrade note — non-conformant rubrics change score
 
