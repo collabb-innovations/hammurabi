@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push to the same branch supersedes the previous run. main is exempt:
+# every commit that lands should have its own recorded result.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 20 is the floor declared in package.json engines; 24 is what the
+        # maintainer runs locally. Both ends are gated so neither drifts.
+        node: ["20", "22", "24"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # The suite is hermetic — no provider keys, no outbound calls. If a test
+      # ever needs a network judge it belongs behind a separate opt-in job, not
+      # here; a gate that needs secrets cannot run on a fork PR.
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  package:
+    name: package hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      # Guards the failure found while auditing the 0.3.0 release: `tsc` does
+      # not clean dist/, so compiled output from another branch survived a
+      # checkout and would have shipped. `prebuild` wipes dist/ now — this
+      # proves it stayed wiped, by requiring every shipped module to have a
+      # source file.
+      - name: No orphaned modules in the tarball
+        run: |
+          npm pack --dry-run --json > /tmp/pack.json
+          node -e '
+            const fs = require("node:fs");
+            const files = JSON.parse(fs.readFileSync("/tmp/pack.json", "utf8"))[0].files.map(f => f.path);
+            const orphans = files
+              .filter(p => /^dist\/.*\.js$/.test(p))
+              .map(p => p.replace(/^dist\//, "").replace(/\.js$/, ""))
+              .filter(m => !fs.existsSync(`src/${m}.ts`));
+            if (orphans.length) {
+              console.error("Orphaned build output with no source file:");
+              for (const o of orphans) console.error(`  dist/${o}.js`);
+              process.exit(1);
+            }
+            console.log(`ok — ${files.length} files, every dist module traces to src/`);
+          '
+
+      # `files` is an allowlist, so anything added at the repo root is excluded
+      # by default. This fails loudly if that ever inverts.
+      - name: Release-only files stay out of the tarball
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const files = JSON.parse(fs.readFileSync("/tmp/pack.json", "utf8"))[0].files.map(f => f.path);
+            const leaked = files.filter(p =>
+              p.startsWith("scripts/") || p === "RELEASING.md" || p.startsWith("tests/") || p.startsWith("examples/"));
+            if (leaked.length) {
+              console.error("These should not ship:", leaked);
+              process.exit(1);
+            }
+            console.log("ok — no release-only or test files in the tarball");
+          '
+
+  preflight:
+    name: publish preflight is runnable
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      # The preflight only ever runs at publish time, on a maintainer's laptop,
+      # once per release — exactly the conditions under which a broken guard
+      # goes unnoticed until it is load-bearing. This asserts it still parses
+      # and still refuses a bad state, without publishing anything.
+      - name: Preflight parses
+        run: node --check scripts/preflight-publish.mjs
+
+      - name: Preflight refuses a non-release state
+        run: |
+          set +e
+          out=$(node scripts/preflight-publish.mjs 2>&1)
+          code=$?
+          set -e
+          echo "$out"
+          if [ $code -eq 0 ]; then
+            echo "::error::preflight passed in CI — it should refuse (CI is never a release commit)"
+            exit 1
+          fi
+          # Exit 1 alone is not enough: a crashed script also exits non-zero.
+          # Require the refusal banner, so this fails if preflight dies instead
+          # of deciding.
+          if ! echo "$out" | grep -q "refusing to publish"; then
+            echo "::error::preflight exited $code without refusing — it crashed rather than evaluating"
+            exit 1
+          fi
+          echo "ok — preflight ran and refused deliberately"
