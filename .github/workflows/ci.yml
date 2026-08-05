@@ -25,9 +25,9 @@ jobs:
         # maintainer runs locally. Both ends are gated so neither drifts.
         node: ["20", "22", "24"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -50,9 +50,9 @@ jobs:
     name: package hygiene
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "24"
           cache: npm
@@ -102,11 +102,11 @@ jobs:
     name: publish preflight is runnable
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "24"
 
