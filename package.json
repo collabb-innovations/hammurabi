@@ -63,9 +63,11 @@
     "README.md"
   ],
   "scripts": {
+    "prebuild": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "tsc",
     "postbuild": "chmod +x dist/cli/run.js dist/cli/check.js",
     "prepack": "npm run build",
+    "prepublishOnly": "node scripts/preflight-publish.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "smoke": "tsx examples/smoke/run.ts",
