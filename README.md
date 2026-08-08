@@ -154,9 +154,11 @@ eval:
 - **`riskTier`** (`low` | `medium` | `high` | `critical`) expands to a default
   panel via `RISK_TIER_PRESETS` — higher tier means more judges, more providers,
   more reasoning, more conservative aggregation. Override any of it with explicit
-  `judges` / `aggregator`. The presets use Anthropic/OpenAI/Google only;
-  **DeepSeek, Fireworks and `openai_compatible` are opt-in** — add them via an
-  explicit `judges` entry.
+  `judges` / `aggregator`. `medium` and `high` presets include a Fireworks
+  cross-provider seat (the preferred non-Anthropic judge for Anthropic-generated
+  output — US-hosted, exfil-mitigated); `low`/`critical` use Anthropic/OpenAI/Google.
+  **DeepSeek and `openai_compatible` are opt-in** — add them via an explicit
+  `judges` entry. See the judge-model policy comment in `src/runner/config.ts`.
 - **`reasoning`** (`none` | `low` | `medium` | `high` | a token budget) maps to
   each provider's mechanism: Anthropic extended thinking, OpenAI
   `reasoning_effort`, Gemini thinking budget, DeepSeek `deepseek-reasoner`.

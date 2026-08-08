@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`RISK_TIER_PRESETS` now include a Fireworks cross-provider seat** (F-27).
+  `medium` gains a Fireworks secondary (`accounts/fireworks/models/qwen3-235b-a22b`);
+  `high`'s Google secondary is replaced by the same Fireworks judge. `low` and
+  `critical` are unchanged. This makes `medium`/`high` genuinely cross-provider
+  for Anthropic-generated output (the preferred non-Anthropic judge — US-hosted,
+  exfil-mitigated, one OSS surface). A judge-model policy is now documented in a
+  comment above the presets: blocking bundles MUST be cross-provider; advisory
+  bundles may stay same-provider with documented rationale.
+
+  **Upgrade note — `FIREWORKS_API_KEY` now required for `medium`/`high` presets.**
+  A spec using `riskTier: medium` or `high` without explicit `judges` now resolves
+  a Fireworks judge. Without `FIREWORKS_API_KEY`, that judge errors at call time
+  and is excluded from the aggregate (the run stays green on the remaining
+  judges) — i.e. the panel silently degrades to same-provider-only. Provision
+  `FIREWORKS_API_KEY`, or pin explicit `judges` that don't require it. No spec in
+  this org uses `riskTier` today (all pin explicit judges), so there is no
+  current-bundle impact; this affects new specs opting into the presets.
+
 ## 0.4.0
 
 Criteria can now declare which fixtures they cover. Minor rather than patch:

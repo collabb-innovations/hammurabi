@@ -76,14 +76,14 @@ eval:
   generatorProvider: openai # advisory: warns if a judge shares this provider
   judges:
     - { provider: anthropic, model: claude-sonnet-4-6, role: primary,    reasoning: medium }
-    - { provider: google,    model: gemini-2.5-flash,  role: secondary,  reasoning: low }
+    - { provider: fireworks, model: accounts/fireworks/models/qwen3-235b-a22b, role: secondary,  reasoning: low }
     - { provider: anthropic, model: claude-haiku-4-5,  role: tiebreaker, reasoning: none }
 ```
 
 Apply these principles when proposing the panel:
 
-- **Cross-provider bias mitigation.** No judge should share the output's provider (`generatorProvider`). A panel mixing Anthropic + Google + OpenAI catches failure modes a single family rates leniently.
-- **Size scales with risk.** `low`/`medium` → a single judge. `high`/`critical` → 3 judges across ≥2 providers.
+- **Cross-provider bias mitigation.** No judge should share the output's provider (`generatorProvider`). A panel mixing Anthropic + Fireworks (+ OpenAI/Google) catches failure modes a single family rates leniently. Fireworks is the preferred non-Anthropic seat for Anthropic-generated output — US-hosted, exfil-mitigated, one OSS surface (see the judge-model policy in `src/runner/config.ts`).
+- **Size scales with risk.** `low` → a single judge. `medium` → 2 judges (Anthropic + Fireworks cross-provider). `high`/`critical` → 3 judges across ≥2 providers.
 - **Reasoning scales with risk.** `none` for cheap pass/fail tiebreakers; `high` for nuanced or high-stakes scoring.
 - **Aggregator scales with risk.** `mean` for typical panels; `min` when any single judge flagging a problem should fail the fixture (money, safety, irreversibility).
 
