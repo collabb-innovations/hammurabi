@@ -33,9 +33,10 @@ test("resolveJudges falls back to a single default Anthropic judge", () => {
 test("resolveJudges expands a risk tier into its preset panel", () => {
   const judges = resolveJudges(spec({ riskTier: "high" }));
   assert.equal(judges.length, RISK_TIER_PRESETS.high.judges.length);
+  // F-27: high's Google secondary was replaced by Fireworks.
   assert.deepEqual(
     judges.map((j) => j.provider),
-    ["anthropic", "google", "anthropic"],
+    ["anthropic", "fireworks", "anthropic"],
   );
 });
 
@@ -106,13 +107,61 @@ test("resolveRegressionThreshold reads the eval block unless overridden", () => 
   );
 });
 
+// F-27 (W-14): Fireworks seat in the risk-tier presets. `medium` gains a
+// Fireworks secondary; `high`'s Google secondary is REPLACED by Fireworks
+// (Google is a closed provider with the same data-exfil profile as Anthropic,
+// which the item mitigates against). Zero current-bundle blast radius: no spec
+// uses riskTier today (all pin explicit judges). The Fireworks model is the
+// PO-selected OSS judge: accounts/fireworks/models/qwen3-235b-a22b.
+test("F-27: medium preset includes a Fireworks cross-provider secondary", () => {
+  const judges = RISK_TIER_PRESETS.medium.judges;
+  const fireworks = judges.filter((j) => j.provider === "fireworks");
+  assert.equal(fireworks.length, 1, "medium has exactly one Fireworks judge");
+  assert.equal(
+    fireworks[0].model,
+    "accounts/fireworks/models/qwen3-235b-a22b",
+  );
+  // The Anthropic primary is retained — Fireworks is the cross-provider ADDITION.
+  assert.ok(
+    judges.some((j) => j.provider === "anthropic"),
+    "medium keeps its Anthropic primary",
+  );
+});
+
+test("F-27: high preset replaces Google with a Fireworks secondary", () => {
+  const judges = RISK_TIER_PRESETS.high.judges;
+  const fireworks = judges.filter((j) => j.provider === "fireworks");
+  assert.equal(fireworks.length, 1, "high has exactly one Fireworks judge");
+  assert.equal(
+    fireworks[0].model,
+    "accounts/fireworks/models/qwen3-235b-a22b",
+  );
+  assert.equal(
+    judges.filter((j) => j.provider === "google").length,
+    0,
+    "high no longer carries a Google (closed-provider) seat",
+  );
+  assert.ok(
+    judges.some((j) => j.provider === "anthropic"),
+    "high keeps its Anthropic primary",
+  );
+});
+
+test("F-27: resolveJudges expands a high-tier spec into a Fireworks-containing panel", () => {
+  const judges = resolveJudges(spec({ riskTier: "high" }));
+  assert.deepEqual(
+    judges.map((j) => j.provider),
+    ["anthropic", "fireworks", "anthropic"],
+  );
+});
+
 test("every risk-tier preset has a non-empty panel and valid weights sum", () => {
   for (const tier of ["low", "medium", "high", "critical"] as const) {
     const preset = RISK_TIER_PRESETS[tier];
     assert.ok(preset.judges.length >= 1, `${tier} has judges`);
     for (const j of preset.judges) {
       assert.ok(j.model.length > 0);
-      assert.ok(["anthropic", "google", "openai"].includes(j.provider));
+      assert.ok(["anthropic", "google", "openai", "fireworks"].includes(j.provider));
     }
   }
 });

@@ -27,6 +27,23 @@ interface Preset {
  * reviews and overrides — model ids and provider mix are deliberately
  * conservative. Higher tier ⇒ more judges, more providers (cross-provider bias
  * mitigation), more reasoning, more conservative aggregation.
+ *
+ * --- Judge-model policy (F-27 / W-14) ----------------------------------
+ * A spec whose judges share the generator's provider emits a same-provider
+ * leniency-bias warning (see warnSameProviderJudges). BLOCKING bundles (those
+ * that gate CI or a deploy) MUST be cross-provider: the panel must include at
+ * least one judge whose provider differs from `generatorProvider`. ADVISORY
+ * bundles may stay same-provider when the criteria are structural or the
+ * output is human-reviewed before action, with the rationale documented in the
+ * spec frontmatter. Fireworks (`provider: fireworks`) is the preferred
+ * non-Anthropic judge provider for Anthropic-generated output — US-hosted,
+ * exfil-mitigated, one OpenAI-compatible surface for the OSS model space.
+ *
+ * CI constraint: Fireworks judges run session/local today (no LLM judge is
+ * wired into CI). A future blocking bundle that resolves to a Fireworks
+ * `riskTier` preset must either pin explicit judges that run in CI or
+ * provision `FIREWORKS_API_KEY` as a CI secret.
+ * ----------------------------------------------------------------------
  */
 export const RISK_TIER_PRESETS: Record<RiskTier, Preset> = {
   low: {
@@ -38,13 +55,17 @@ export const RISK_TIER_PRESETS: Record<RiskTier, Preset> = {
   medium: {
     judges: [
       { provider: "anthropic", model: "claude-sonnet-4-6", role: "primary", reasoning: "low" },
+      // F-27: Fireworks cross-provider secondary — the OSS/exfil-mitigated seat.
+      { provider: "fireworks", model: "accounts/fireworks/models/qwen3-235b-a22b", role: "secondary", reasoning: "none" },
     ],
     aggregator: "mean",
   },
   high: {
     judges: [
       { provider: "anthropic", model: "claude-sonnet-4-6", role: "primary", reasoning: "medium" },
-      { provider: "google", model: "gemini-2.5-flash", role: "secondary", reasoning: "low" },
+      // F-27: replaced Google (closed provider, same exfil profile as Anthropic)
+      // with Fireworks so the high-tier panel is genuinely cross-provider.
+      { provider: "fireworks", model: "accounts/fireworks/models/qwen3-235b-a22b", role: "secondary", reasoning: "low" },
       { provider: "anthropic", model: "claude-haiku-4-5", role: "tiebreaker", reasoning: "none" },
     ],
     aggregator: "mean",
