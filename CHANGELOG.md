@@ -12,11 +12,11 @@
   rubric is not probed (that judge is never called). An **explicit** Fireworks
   (or other) seat is probed even on a code-only rubric — you asked for a panel
   this environment cannot staff.
-- **A judge that errors at call time (529, timeout, parse) is still excluded
-  from the aggregate** (unchanged scoring) but now emits a once-per-run
-  `console.warn` naming the model and saying it was **excluded from the
-  aggregate**. Deduped by `(model, error)` across fixtures. Stderr only; the
-  report schema is unchanged.
+- **A judge that errors at call time (529, timeout, parse) is still
+  excluded from the aggregate** (unchanged scoring) but now emits a
+  once-per-run `console.warn` naming the model and saying it was
+  **excluded from the aggregate**. Deduped by `(model, error)` across
+  fixtures. Stderr only; the report schema is unchanged.
 
 ## 0.4.0
 
