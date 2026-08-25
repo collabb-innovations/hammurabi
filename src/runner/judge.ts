@@ -4,6 +4,8 @@ import type { Fixture } from "../schema/fixture.js";
 import type { CriterionScore, JudgeVote } from "../schema/report.js";
 import { SYS_JUDGE } from "./client.js";
 import { callJudge } from "./providers.js";
+import type { JudgeCallRequest, JudgeCallResponse } from "./providers.js";
+import type { ExcludedJudge } from "./excluded-judges.js";
 import type { Aggregator, JudgeConfig } from "./types.js";
 
 interface JudgeOneArgs {
@@ -13,6 +15,7 @@ interface JudgeOneArgs {
   fixture: Fixture;
   output: unknown;
   judge: JudgeConfig;
+  judgeCall?: (req: JudgeCallRequest) => Promise<JudgeCallResponse>;
 }
 
 interface JudgeOneScore {
@@ -34,17 +37,21 @@ export interface AggregatedPanel {
   scores: CriterionScore[];
   /** Criterion ids no judge could score (every vote errored or was omitted). */
   unscoreable: string[];
+  /** Whole-judge call failures this panel excluded from the aggregate. */
+  excludedJudges: ExcludedJudge[];
 }
 
 async function judgeFixtureOne(args: JudgeOneArgs): Promise<JudgeOneScore[]> {
-  const { spec, criteria, passThreshold, fixture, output, judge } = args;
+  const { spec, criteria, passThreshold, fixture, output, judge, judgeCall } =
+    args;
 
   const specBlob = `# Spec\nname: ${spec.frontmatter.name}\nversion: ${spec.frontmatter.version}\ndescription: ${spec.frontmatter.description}\n\n${spec.body}`;
   const rubricBlob = formatRubricForJudge(criteria, passThreshold);
   const fixtureBlob = formatFixtureBlock(fixture);
   const outputBlob = formatOutputBlock(output);
 
-  const { scores } = await callJudge({
+  const call = judgeCall ?? callJudge;
+  const { scores } = await call({
     provider: judge.provider ?? "anthropic",
     model: judge.model,
     reasoning: judge.reasoning ?? "none",
@@ -82,13 +89,22 @@ interface JudgePanelArgs {
   output: unknown;
   judges: JudgeConfig[];
   aggregator: Aggregator;
+  judgeCall?: (req: JudgeCallRequest) => Promise<JudgeCallResponse>;
 }
 
 export async function judgeFixturePanel(
   args: JudgePanelArgs,
 ): Promise<AggregatedPanel> {
-  const { spec, criteria, passThreshold, fixture, output, judges, aggregator } =
-    args;
+  const {
+    spec,
+    criteria,
+    passThreshold,
+    fixture,
+    output,
+    judges,
+    aggregator,
+    judgeCall,
+  } = args;
 
   const perJudge: PanelJudgeResult[] = await Promise.all(
     judges.map(async (judge): Promise<PanelJudgeResult> => {
@@ -100,6 +116,7 @@ export async function judgeFixturePanel(
           fixture,
           output,
           judge,
+          ...(judgeCall ? { judgeCall } : {}),
         });
         return { model: judge.model, scores };
       } catch (e) {
@@ -164,7 +181,13 @@ export function aggregateCriterionScores(
     };
   });
 
-  return { scores, unscoreable };
+  return { scores, unscoreable, excludedJudges: excludedJudgesOf(perJudge) };
+}
+
+function excludedJudgesOf(perJudge: PanelJudgeResult[]): ExcludedJudge[] {
+  return perJudge
+    .filter((j): j is PanelJudgeResult & { error: string } => Boolean(j.error))
+    .map((j) => ({ model: j.model, error: j.error }));
 }
 
 function voteError(

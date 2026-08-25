@@ -376,6 +376,47 @@ function joinBlocks(blocks: { text: string }[]): string {
   return blocks.map((b) => b.text).join("\n\n");
 }
 
+/**
+ * Name of the env var a resolved judge still needs, or undefined when it is
+ * already set. Mirrors the reads in this file (Anthropic `ANTHROPIC_API_KEY`,
+ * OpenAI `OPENAI_API_KEY`, Google `GEMINI_API_KEY ?? GOOGLE_API_KEY`, DeepSeek
+ * `DEEPSEEK_API_KEY`, Fireworks `FIREWORKS_API_KEY`, openai_compatible the
+ * judge's own `apiKeyEnv`). Empty string counts as unset — same as
+ * `openAICompatibleClient`.
+ */
+export function unsetJudgeApiKeyEnv(judge: {
+  provider?: JudgeProvider;
+  apiKeyEnv?: string;
+}): string | undefined {
+  const provider = judge.provider ?? "anthropic";
+  switch (provider) {
+    case "anthropic":
+      return process.env.ANTHROPIC_API_KEY ? undefined : "ANTHROPIC_API_KEY";
+    case "openai":
+      return process.env.OPENAI_API_KEY ? undefined : "OPENAI_API_KEY";
+    case "google": {
+      // Same operator as gemini(): empty GEMINI_API_KEY must not fall through
+      // to GOOGLE_API_KEY, or the probe would pass a panel the client cannot
+      // staff.
+      const apiKey =
+        process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+      if (apiKey) return undefined;
+      return process.env.GEMINI_API_KEY !== undefined
+        ? "GEMINI_API_KEY"
+        : process.env.GOOGLE_API_KEY !== undefined
+          ? "GOOGLE_API_KEY"
+          : "GEMINI_API_KEY";
+    }
+    case "deepseek":
+      return process.env.DEEPSEEK_API_KEY ? undefined : "DEEPSEEK_API_KEY";
+    case "fireworks":
+      return process.env.FIREWORKS_API_KEY ? undefined : "FIREWORKS_API_KEY";
+    case "openai_compatible":
+      if (!judge.apiKeyEnv) return "api_key_env";
+      return process.env[judge.apiKeyEnv] ? undefined : judge.apiKeyEnv;
+  }
+}
+
 /** Normalize reasoning effort into an extended-thinking token budget. */
 export function reasoningToTokens(r: ReasoningEffort): number {
   if (typeof r === "number") return Math.max(0, Math.floor(r));

@@ -154,6 +154,17 @@ one for any bundle whose gate carries weight.
 
 ---
 
+## Missing judge keys refuse the run
+
+A panel you cannot staff is a config error, not a quality score. If a
+resolved judge's key env is unset (`FIREWORKS_API_KEY`, `OPENAI_API_KEY`,
+…), `run()` throws before any fixture executes. A mass-zero / still-green
+run is **not** how a missing key looks any more. A judge that errors later
+(timeout, 529, parse) stays excluded from the aggregate and the runner
+warns that it was `excluded from the aggregate`.
+
+---
+
 ## Where these patterns came from
 
 Five rounds of adversarial review of `hook.`'s first eval-driven bundle
