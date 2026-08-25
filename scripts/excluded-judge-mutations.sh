@@ -169,10 +169,8 @@ if ! oracle; then
 fi
 echo "baseline ok"
 
-run_row W1 "$EXCL" "console.warn(" "void (0 && console.warn("
-# Replace only the throw in refuseMissingJudgeKeys: the distinctive string sits
-# inside that throw, so swapping the throw keyword+constructor is the refusal.
-run_row R1 "$EXCL" "throw new Error(" "return; void ("
+run_row W1 "$EXCL" $'    console.warn(\n      `[hammurabi] judge \'${item.model}\' errored and was excluded from the aggregate: ${item.error}`,\n    );' $'    void item;'
+run_row R1 "$EXCL" $'    throw new Error(\n      `judge ${judge.model}: environment variable ${env} is not set — refusing to run a panel that cannot be staffed`,\n    );' $'    return;'
 run_row P1 "$JUDGE" "excludedJudges: excludedJudgesOf(perJudge)" "excludedJudges: []"
 run_row D1 "$EXCL" "if (seen.has(key)) continue;" "if (false && seen.has(key)) continue;"
 run_row S1 "$EXCL" "return judgesWereDeclared(spec, override) || rubricNeedsLlmPanel(rubric);" "return false;"
