@@ -394,10 +394,19 @@ export function unsetJudgeApiKeyEnv(judge: {
       return process.env.ANTHROPIC_API_KEY ? undefined : "ANTHROPIC_API_KEY";
     case "openai":
       return process.env.OPENAI_API_KEY ? undefined : "OPENAI_API_KEY";
-    case "google":
-      return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
-        ? undefined
-        : "GEMINI_API_KEY";
+    case "google": {
+      // Same operator as gemini(): empty GEMINI_API_KEY must not fall through
+      // to GOOGLE_API_KEY, or the probe would pass a panel the client cannot
+      // staff.
+      const apiKey =
+        process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+      if (apiKey) return undefined;
+      return process.env.GEMINI_API_KEY !== undefined
+        ? "GEMINI_API_KEY"
+        : process.env.GOOGLE_API_KEY !== undefined
+          ? "GOOGLE_API_KEY"
+          : "GEMINI_API_KEY";
+    }
     case "deepseek":
       return process.env.DEEPSEEK_API_KEY ? undefined : "DEEPSEEK_API_KEY";
     case "fireworks":

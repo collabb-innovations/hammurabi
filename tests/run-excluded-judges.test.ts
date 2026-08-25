@@ -131,6 +131,24 @@ test("unsetJudgeApiKeyEnv accepts either Google key", () => {
   }
 });
 
+test("unsetJudgeApiKeyEnv refuses a blank GEMINI_API_KEY even when GOOGLE_API_KEY is set", () => {
+  const gem = process.env.GEMINI_API_KEY;
+  const goog = process.env.GOOGLE_API_KEY;
+  try {
+    process.env.GEMINI_API_KEY = "";
+    process.env.GOOGLE_API_KEY = "x";
+    assert.equal(
+      unsetJudgeApiKeyEnv({ provider: "google" }),
+      "GEMINI_API_KEY",
+    );
+  } finally {
+    if (gem === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = gem;
+    if (goog === undefined) delete process.env.GOOGLE_API_KEY;
+    else process.env.GOOGLE_API_KEY = goog;
+  }
+});
+
 test("a mixed panel stays green and warns once that the down judge was excluded from the aggregate", async () => {
   const { warnings, restore } = captureWarns();
   try {
