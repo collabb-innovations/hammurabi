@@ -7,6 +7,12 @@ import {
 import { executeFixture } from "./execute.js";
 import { scoreCodeCriterion } from "./deterministic.js";
 import { judgeFixturePanel } from "./judge.js";
+import {
+  refuseMissingJudgeKeys,
+  shouldRefuseMissingJudgeKeys,
+  warnExcludedJudges,
+  type ExcludedJudge,
+} from "./excluded-judges.js";
 import { computeRegressions, scoreFixture, summarize } from "./score.js";
 import { partitionByApplicability } from "./applicability.js";
 import type { JudgeConfig, RunOptions } from "./types.js";
@@ -14,6 +20,11 @@ import type { Spec } from "../schema/spec.js";
 import type { Rubric } from "../schema/rubric.js";
 
 export type { Aggregator, JudgeConfig, RunOptions } from "./types.js";
+export {
+  refuseMissingJudgeKeys,
+  warnExcludedJudges,
+} from "./excluded-judges.js";
+export { unsetJudgeApiKeyEnv } from "./providers.js";
 export {
   RISK_TIER_PRESETS,
   resolveJudges,
@@ -30,9 +41,13 @@ export async function run(options: RunOptions): Promise<Report> {
   // caller overrides them. Precedence lives in ./config.ts.
   const judges = resolveJudges(options.spec, options.judges);
   const aggregator = resolveAggregator(options.spec, options.aggregator);
+  if (shouldRefuseMissingJudgeKeys(options.spec, options.rubric, options.judges)) {
+    refuseMissingJudgeKeys(judges);
+  }
   warnSameProviderJudges(options.spec, judges);
   warnNonConformantWeights(options.rubric);
   const results: FixtureResult[] = [];
+  const excludedJudges: ExcludedJudge[] = [];
 
   for (const fixture of options.fixtures.fixtures) {
     const { output, error } = await executeFixture(
@@ -121,9 +136,11 @@ export async function run(options: RunOptions): Promise<Report> {
         output,
         judges,
         aggregator,
+        ...(options.judgeCall ? { judgeCall: options.judgeCall } : {}),
       });
       llmScores = judged.scores;
       unscoreable = judged.unscoreable;
+      excludedJudges.push(...judged.excludedJudges);
     }
     if (unscoreable.length > 0) {
       // Every judge errored or omitted these criteria — we genuinely could not
@@ -161,6 +178,8 @@ export async function run(options: RunOptions): Promise<Report> {
       passed,
     });
   }
+
+  warnExcludedJudges(excludedJudges);
 
   const regressions = options.baseline
     ? computeRegressions(

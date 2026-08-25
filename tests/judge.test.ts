@@ -49,6 +49,11 @@ test("aggregateCriterionScores folds a healthy panel with the mean aggregator", 
   assert.equal(scores.find((s) => s.criterionId === "b")?.score, 3);
   // every judge's raw vote is preserved for the audit trail
   assert.equal(scores[0].judgeVotes.length, 2);
+  assert.deepEqual(
+    aggregateCriterionScores(C, [judge("m1", 1, 4), judge("m2", 0, 2)], "mean")
+      .excludedJudges,
+    [],
+  );
 });
 
 test("min aggregator takes the worst valid vote", () => {
@@ -75,6 +80,11 @@ test("an errored judge is recorded but excluded from the aggregate", () => {
   assert.equal(votes.length, 2);
   const downVote = votes.find((v) => v.model === "down");
   assert.match(downVote?.error ?? "", /529 overloaded/);
+  assert.deepEqual(
+    aggregateCriterionScores(C, [judge("up", 1, 4), errored], "mean")
+      .excludedJudges,
+    [{ model: "down", error: "529 overloaded" }],
+  );
 });
 
 test("an omitted criterion is excluded from its aggregate", () => {
@@ -105,4 +115,11 @@ test("a criterion no judge could score lands in unscoreable", () => {
   // scores still present (with errored votes) for the audit trail
   assert.equal(scores.length, 2);
   assert.ok(scores[0].judgeVotes.every((v) => v.error));
+  assert.deepEqual(
+    aggregateCriterionScores(C, [e1, e2], "mean").excludedJudges,
+    [
+      { model: "j1", error: "timeout" },
+      { model: "j2", error: "timeout" },
+    ],
+  );
 });

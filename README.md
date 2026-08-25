@@ -196,8 +196,11 @@ eval:
 ```
 
 `base_url`/`api_key_env` are required for `openai_compatible` and rejected on
-every other provider (their endpoints are built in). A missing key env var
-fails loud at call time, naming the variable. Both providers send the exact
+every other provider (their endpoints are built in). **A missing key env var
+refuses the run before any fixture executes**, naming the variable (`runner
+failed:` / exit 2). A judge that then errors at call time (timeout, 529, parse)
+is excluded from the aggregate and the runner warns once that it was
+`excluded from the aggregate`. Both providers send the exact
 request shape proven out on DeepSeek-via-Fireworks: non-reasoning calls pin
 `reasoning_effort: "none"`, `temperature: 0` and schema-constrained JSON-object
 mode; thinking calls omit temperature/response_format and pin the JSON shape

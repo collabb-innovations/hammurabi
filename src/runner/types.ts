@@ -6,6 +6,7 @@ import type {
 import type { Rubric } from "../schema/rubric.js";
 import type { FixtureSet } from "../schema/fixture.js";
 import type { Report } from "../schema/report.js";
+import type { JudgeCallRequest, JudgeCallResponse } from "./providers.js";
 
 export interface JudgeConfig {
   model: string;
@@ -39,4 +40,9 @@ export interface RunOptions {
   baseline?: Report;
   regressionThreshold?: number;
   execute?: (input: unknown) => Promise<unknown>;
+  /**
+   * Test seam: replace the provider SDK call. Production never sets this.
+   * Missing-key refusal still runs against `judges` even when this is set.
+   */
+  judgeCall?: (req: JudgeCallRequest) => Promise<JudgeCallResponse>;
 }
