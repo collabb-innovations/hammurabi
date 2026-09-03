@@ -142,12 +142,70 @@ one for any bundle whose gate carries weight.
 
 ---
 
+## Per-fixture applicability — `appliesTo` (since 0.4.0)
+
+Not every criterion applies to every fixture. A rubric that grades
+"does the security finding avoid restating the secret" against a fixture
+with nothing sensitive in it is asking an unanswerable question, and an
+unanswerable question does not produce a neutral result — it produces a
+score, which is worse.
+
+**The workaround this replaced, and why it was a footgun.** Authors used to
+have the criterion return `1.0` when it did not apply. That is
+indistinguishable from a criterion that applied and passed, so it silently
+inflated every weighted score and hid criteria that were doing no work at
+all. Scoring `0` instead is no better: it is indistinguishable from a
+criterion that applied and failed.
+
+**Use `appliesTo`.** Tag the fixtures, scope the criterion:
+
+```jsonc
+{
+  "id": "security-no-secret-leak",
+  "name": "...",
+  "judgePrompt": "...",
+  "weight": 0.15,
+  "scale": { "kind": "pass-fail" },
+  "appliesTo": ["area:security"]   // only fixtures carrying this tag
+}
+```
+
+Three properties worth knowing before you rely on it:
+
+- **A criterion with no `appliesTo` applies to everything.** That is the
+  existing behaviour and stays the default, so adding the field to one
+  criterion is a drop-in change.
+- **The match is "at least one tag", not "all".** `appliesTo` reads as a
+  list of contexts the criterion is valid in, not a conjunction of
+  requirements.
+- **A criterion that sits out is recorded, not merely absent.** It appears
+  in `FixtureResult.inapplicable`, so a criterion silently applying to
+  nothing is visible in the report rather than invisible. A criterion whose
+  `appliesTo` matches **no fixture in the suite** is a load-time error, not
+  a warning — that state is always an authoring mistake.
+
+**The arithmetic consequence, which is the new thing to get right.** A
+fixture's score is renormalised over the weight *actually in play*. A
+fixture where 3 of 6 criteria apply is scored out of those 3, not divided by
+weight that was never scored. For a rubric whose weights sum to 1 this is
+exactly the previous arithmetic.
+
+It stops being exactly the previous arithmetic if your weights do **not**
+sum to 1. The runner warns:
+
+```
+[hammurabi] rubric for spec '<name>' has criterion weights summing to <n>
+(expected 1.0) — fixture scores are renormalised over the weight actually
+scored, so thresholds apply to a different scale than the weights suggest.
+```
+
+Read that warning as an error in practice: your `passThreshold` no longer
+means what the weights imply.
+
 ## Related issues & deeper material
 
 - **#7** — Self-test + mutation testing. The framework-level version of
   "exercise every criterion." Coming in a future release.
-- **#9** — First-class per-fixture criterion applicability (retiring
-  `N/A → return 1.0`). Pairs with this guide's #1.
 - **#10** — `gate: all-pass` aggregation mode. For conformance gates where
   any single criterion at zero should fail the fixture without weight
   arithmetic.
@@ -170,5 +228,6 @@ warns that it was `excluded from the aggregate`.
 Five rounds of adversarial review of `hook.`'s first eval-driven bundle
 (continuum#248, June 2026). The first three rounds surfaced #1, #2, and
 #3 above; rounds 4 and 5 surfaced under-coverage and the silent N/A
-footgun (covered by #7 and #9). Eight authoring footguns total — three
+footgun. Under-coverage is still open as #7; the N/A footgun was closed
+by `appliesTo` in 0.4.0 — see "Per-fixture applicability" above. Eight authoring footguns total — three
 preventable with this guide alone.
