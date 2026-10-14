@@ -24,7 +24,8 @@ npx @collabb/hammurabi hammurabi-run path/to/foo.spec.md
 
 ## CLI
 
-Hammurabi ships two bins (available after install via npm bin).
+Hammurabi ships bins for judging a bundle and for the non-interactive
+propose / select / lock flow (available after install via npm bin).
 
 **`hammurabi-run`** — one bundle:
 
@@ -69,6 +70,32 @@ with a precise message naming the criterion or target. Skip with `--no-preflight
 Run `hammurabi-run --help` / `hammurabi-check --help` for the full flag list. A
 drop-in GitHub Action template lives at `templates/eval-gate.yml`.
 
+**`hammurabi-propose` / `hammurabi-select` / `hammurabi-lock`** — turn a task
+source into a content-hashed lock. No prompts and no model call. The caller
+supplies draft decisions as JSON; hammurabi validates, normalizes, and hashes.
+Selection is read from task-list checkboxes, and an explicit selection file
+overrides those checkboxes per decision. The lock is written to stdout or
+`--out`. `--publish` and `--post` are the only writes, and both are opt-in.
+
+```sh
+hammurabi-propose --source github-issues:owner/repo#32 --in draft.json > proposal.json
+hammurabi-select --proposal proposal.json --source text:./tasks.md > selection.json
+hammurabi-lock --proposal proposal.json --selection selection.json > lock.json
+hammurabi-lock --verify lock.json
+```
+
+`github-issues` reads `owner/repo#N` with `GITHUB_TOKEN` (optional API base:
+`HAMMURABI_GITHUB_API`). `text` reads a markdown task list, or `-` for stdin.
+Checkbox sections sit under a `D1` heading (`## D1 ...` or `**D1 ...**`).
+`contentHash` is `sha256:` over RFC 8785 canonical JSON of the lock, excluding
+`contentHash`, `lockedAt`, and `lockedBy`.
+
+Exit codes for these three bins:
+
+- `0` — ok
+- `1` — validation or verify failure (undecided decision, over-selection, proposal mismatch, hash mismatch)
+- `2` — could not run (bad args, missing source, credential or network error)
+
 ## Slash commands
 
 Copy them into any project's `.claude/commands/`:
@@ -82,18 +109,21 @@ cp node_modules/@collabb/hammurabi/commands/*.md .claude/commands/
 
 ## Schema
 
-Three artifact types, all language-neutral on disk:
+Artifact types, all language-neutral on disk:
 
 | Artifact | Format | TS type |
 |----------|--------|---------|
 | Spec | `*.spec.md` (frontmatter + body) | `Spec` |
 | Rubric | `*.rubric.json` | `Rubric` |
 | Fixtures | `*.fixtures.jsonl` | `FixtureSet` |
+| Proposal | JSON | `Proposal` |
+| Selection | JSON | `Selection` |
+| Lock | JSON | `Lock` |
 
 Reports are JSON: `Report` type.
 
 ```ts
-import type { Spec, Rubric, FixtureSet, Report } from "@collabb/hammurabi/schema";
+import type { Spec, Rubric, FixtureSet, Report, Proposal, Selection, Lock } from "@collabb/hammurabi/schema";
 import { run } from "@collabb/hammurabi/runner";
 ```
 

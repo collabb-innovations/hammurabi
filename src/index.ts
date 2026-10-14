@@ -24,3 +24,16 @@ export {
   ReportSchema,
 } from "./loaders/index.js";
 export type { Bundle } from "./loaders/index.js";
+export {
+  propose,
+  select,
+  lock,
+  verify,
+  postLock,
+  registerAdapter,
+  getAdapter,
+  createGitHubIssuesAdapter,
+  textAdapter,
+} from "./lock/index.js";
+export type { SourceAdapter, SourceDoc, AdapterChoice } from "./lock/index.js";
+export { HammurabiLockError } from "./lock/index.js";

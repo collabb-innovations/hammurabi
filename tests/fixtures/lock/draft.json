@@ -1,0 +1,56 @@
+{
+  "id": "lock-core",
+  "title": "Propose, select, lock",
+  "goal": ["Turn a task source into a content-hashed lock without a model call"],
+  "requirements": [
+    { "id": "R1", "text": "Non-interactive JSON in, JSON out" },
+    { "id": "R3", "text": "contentHash is RFC 8785 JCS plus sha256" }
+  ],
+  "decisions": [
+    {
+      "id": "D1",
+      "question": "Who authors options?",
+      "options": [
+        { "id": "A", "label": "Caller supplies draft JSON", "detail": "No LLM" },
+        { "id": "B", "label": "Optional judge provider" }
+      ]
+    },
+    {
+      "id": "D2",
+      "question": "Selection source of truth?",
+      "options": [
+        { "id": "A", "label": "Checkboxes only" },
+        { "id": "B", "label": "Explicit file only" },
+        { "id": "C", "label": "Both; file overrides" }
+      ]
+    },
+    {
+      "id": "D3",
+      "question": "Lock storage?",
+      "multi": true,
+      "options": [
+        { "id": "A", "label": "stdout or file" },
+        { "id": "C", "label": "opt-in comment" }
+      ]
+    }
+  ],
+  "diagrams": [
+    {
+      "id": "flow",
+      "lang": "mermaid",
+      "text": "flowchart LR\n  A-->B\n  click A \"javascript:alert(1)\"\n\u000f"
+    }
+  ],
+  "evalPlan": {
+    "criteria": [
+      "Determinism",
+      "Tamper detection",
+      "Adapter parity",
+      "Refusals",
+      "Non-interactive",
+      "Boundary"
+    ],
+    "fixtures": "tests/fixtures/lock"
+  },
+  "createdAt": "2026-10-14T21:44:54.000Z"
+}

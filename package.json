@@ -30,7 +30,10 @@
   "types": "./dist/index.d.ts",
   "bin": {
     "hammurabi-run": "./dist/cli/run.js",
-    "hammurabi-check": "./dist/cli/check.js"
+    "hammurabi-check": "./dist/cli/check.js",
+    "hammurabi-propose": "./dist/cli/propose.js",
+    "hammurabi-select": "./dist/cli/select.js",
+    "hammurabi-lock": "./dist/cli/lock.js"
   },
   "exports": {
     ".": {
@@ -52,10 +55,14 @@
     "./cli": {
       "types": "./dist/cli/report-md.d.ts",
       "import": "./dist/cli/report-md.js"
-    }
+    },
+    "./schema/proposal.schema.json": "./schema/proposal.schema.json",
+    "./schema/selection.schema.json": "./schema/selection.schema.json",
+    "./schema/lock.schema.json": "./schema/lock.schema.json"
   },
   "files": [
     "dist/",
+    "schema/",
     "commands/",
     "templates/",
     "docs/",
@@ -65,7 +72,7 @@
   "scripts": {
     "prebuild": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "tsc",
-    "postbuild": "chmod +x dist/cli/run.js dist/cli/check.js",
+    "postbuild": "chmod +x dist/cli/run.js dist/cli/check.js dist/cli/propose.js dist/cli/select.js dist/cli/lock.js",
     "prepack": "npm run build",
     "prepublishOnly": "node scripts/preflight-publish.mjs",
     "typecheck": "tsc --noEmit",
