@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Non-interactive propose / select / lock.** `propose`, `select`, `lock`, and
+  `verify` turn a caller-supplied draft plus a task source into a
+  content-hashed lock. No prompts and no model call. Schemas are Zod v4 under
+  `@collabb/hammurabi/schema`, with JSON Schema files at
+  `schema/proposal.schema.json`, `schema/selection.schema.json`, and
+  `schema/lock.schema.json`.
+- CLI bins `hammurabi-propose`, `hammurabi-select`, and `hammurabi-lock`.
+  `contentHash` is `sha256:` over RFC 8785 (JCS) canonical JSON, excluding
+  `contentHash`, `lockedAt`, and `lockedBy`.
+- Source adapters: `github-issues` (`owner/repo#N`, `GITHUB_TOKEN`) and `text`
+  (a markdown task list or stdin). Reads are the default. `--publish` and
+  `--post` opt in to writing a checklist or the lock hash back to the source.
+  An explicit selection file overrides parsed checkboxes per decision.
+  Credential and network failures exit 2 and name the cause.
+
 ## 0.4.1
 
 ### Fixed
