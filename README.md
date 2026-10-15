@@ -90,7 +90,15 @@ Checkbox sections sit under a `D1` heading (`## D1 ...` or `**D1 ...**`).
 `contentHash` is `sha256:` over RFC 8785 canonical JSON of the lock, excluding
 `contentHash`, `lockedAt`, and `lockedBy`.
 
-Exit codes for these three bins:
+**`hammurabi-verify`** — offline check of a fetched issue LOCK. No network and no token.
+
+```sh
+hammurabi-verify --issue-json issue.json --allowlist allowlist.json
+```
+
+`issue.json` is the issue body plus comments. `allowlist.json` is a JSON array of GitHub logins. `lockedBy` is the last LOCK comment's `user.login`. The hash is `sha256:` over RFC 8785 canonical JSON of the issue body and must match that comment. Prints `{ok, reason, lockedBy, hash}` and exits 0 when the lock is valid, 1 when it is not.
+
+Exit codes for propose / select / lock:
 
 - `0` — ok
 - `1` — validation or verify failure (undecided decision, over-selection, proposal mismatch, hash mismatch)

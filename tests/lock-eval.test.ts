@@ -497,6 +497,7 @@ test("boundary: propose/select/lock ship no provider SDK and no private commands
     "hammurabi-propose",
     "hammurabi-run",
     "hammurabi-select",
+    "hammurabi-verify",
   ]);
   for (const name of ["proposal", "selection", "lock"] as const) {
     const onDisk = JSON.parse(await readFile(join(root, "schema", `${name}.schema.json`), "utf8")) as object;

@@ -1,0 +1,15 @@
+{
+  "title": "Widget spec",
+  "body": "# Widget spec\n\nReturn the input in uppercase.\n\n--locked-by justin\n",
+  "user": { "login": "justin" },
+  "lockedBy": "justin",
+  "comments": [
+    {
+      "body": "LOCK sha256:c26313a7497646781fb0e492b25c0b7f1766177cdcd92f9abbdbe269214121c5\n--locked-by justin\n",
+      "author": "justin",
+      "login": "justin",
+      "lockedBy": "justin",
+      "user": { "login": "mallory", "name": "Justin" }
+    }
+  ]
+}

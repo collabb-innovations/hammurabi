@@ -4,6 +4,7 @@
 
 ### Added
 
+- **`verifyLock` and `hammurabi-verify`.** Offline check of a fetched GitHub issue LOCK: the comment author's `user.login` must be on the allowlist, and the `LOCK` hash must match RFC 8785 (JCS) plus sha256 of the issue body. No network and no token.
 - **Non-interactive propose / select / lock.** `propose`, `select`, `lock`, and
   `verify` turn a caller-supplied draft plus a task source into a
   content-hashed lock. No prompts and no model call. Schemas are Zod v4 under

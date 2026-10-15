@@ -29,11 +29,12 @@ export {
   select,
   lock,
   verify,
+  verifyLock,
   postLock,
   registerAdapter,
   getAdapter,
   createGitHubIssuesAdapter,
   textAdapter,
 } from "./lock/index.js";
-export type { SourceAdapter, SourceDoc, AdapterChoice } from "./lock/index.js";
+export type { SourceAdapter, SourceDoc, AdapterChoice, VerifyLockResult } from "./lock/index.js";
 export { HammurabiLockError } from "./lock/index.js";

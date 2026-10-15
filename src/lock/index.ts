@@ -7,6 +7,8 @@ registerAdapter(createGitHubIssuesAdapter());
 
 export { propose, select, lock, verify, postLock, hashProposal, hashSelection, lockPreimage, normalizeProposal } from "./api.js";
 export type { ProposeInput, SelectInput, LockInput } from "./api.js";
+export { verifyLock } from "./verify-lock.js";
+export type { VerifyLockResult } from "./verify-lock.js";
 export { registerAdapter, getAdapter } from "./adapters/registry.js";
 export { createGitHubIssuesAdapter } from "./adapters/github.js";
 export { textAdapter } from "./adapters/text.js";
