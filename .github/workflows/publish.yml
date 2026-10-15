@@ -51,8 +51,8 @@ jobs:
 
       - run: npm ci
 
-      # Trusted publishing needs npm >= 11.5.1. Do not set a registry token
-      # here; a dummy NODE_AUTH_TOKEN makes the CLI skip OIDC.
+      # Publishing is OIDC only. npm >= 11.5.1 is required. Do not set a
+      # registry token; a dummy NODE_AUTH_TOKEN makes the CLI skip OIDC.
       - name: Install npm CLI
         run: npm install -g npm@11.21.0
 
@@ -62,34 +62,6 @@ jobs:
         run: npm run build
 
       - name: Publish
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          set -euo pipefail
           unset NODE_AUTH_TOKEN
-          echo "npm $(npm --version)"
-          log="$(mktemp)"
-          # Outside the repo. A userconfig in the worktree fails the clean-tree preflight.
-          npmrc="${RUNNER_TEMP}/npmrc.publish"
-          cleanup() {
-            rm -f "$log" "$npmrc"
-            unset NODE_AUTH_TOKEN
-          }
-          trap cleanup EXIT
-          set +e
-          npm publish --provenance --access public >"$log" 2>&1
-          status=$?
-          set -e
-          cat "$log"
-          if [ "$status" -eq 0 ]; then
-            exit 0
-          fi
-          if [ -n "${NPM_TOKEN:-}" ] && grep -Eq 'ENEEDAUTH|E401|Unable to authenticate|need auth' "$log"; then
-            echo "Trusted publishing was not accepted; retrying with NPM_TOKEN."
-            printf '%s\n' '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}' > "$npmrc"
-            export NPM_CONFIG_USERCONFIG="$npmrc"
-            export NODE_AUTH_TOKEN="$NPM_TOKEN"
-            npm publish --provenance --access public
-            exit 0
-          fi
-          exit "$status"
+          npm publish --provenance --access public
