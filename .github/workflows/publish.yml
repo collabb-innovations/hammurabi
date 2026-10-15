@@ -1,0 +1,88 @@
+name: Publish
+
+# Manual only. A dispatch does not publish by itself: the publish job waits
+# on the npm-publish environment, which must require a reviewer.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+  publish:
+    name: publish
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      # Trusted publishing needs npm >= 11.5.1. Do not set a registry token
+      # here; a dummy NODE_AUTH_TOKEN makes the CLI skip OIDC.
+      - name: Install npm CLI
+        run: npm install -g npm@11.21.0
+
+      - name: Publish
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          unset NODE_AUTH_TOKEN
+          echo "npm $(npm --version)"
+          log="$(mktemp)"
+          cleanup() {
+            rm -f "$log" .npmrc.publish
+            unset NODE_AUTH_TOKEN
+          }
+          trap cleanup EXIT
+          set +e
+          npm publish --provenance --access public >"$log" 2>&1
+          status=$?
+          set -e
+          cat "$log"
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
+          if [ -n "${NPM_TOKEN:-}" ] && grep -Eq 'ENEEDAUTH|E401|Unable to authenticate|need auth' "$log"; then
+            echo "Trusted publishing was not accepted; retrying with NPM_TOKEN."
+            printf '%s\n' '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}' > .npmrc.publish
+            export NPM_CONFIG_USERCONFIG="${PWD}/.npmrc.publish"
+            export NODE_AUTH_TOKEN="$NPM_TOKEN"
+            npm publish --provenance --access public
+            exit 0
+          fi
+          exit "$status"
