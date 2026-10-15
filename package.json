@@ -1,6 +1,6 @@
 {
   "name": "@collabb/hammurabi",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Spec → rubric → fixtures → runner. Trust your outputs without re-reading every diff.",
   "type": "module",
   "publishConfig": {
