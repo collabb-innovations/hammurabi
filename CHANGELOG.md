@@ -20,6 +20,12 @@
   An explicit selection file overrides parsed checkboxes per decision.
   Credential and network failures exit 2 and name the cause.
 
+## 0.5.1
+
+### Added
+
+- Add hammurabi-verify / verifyLock() (#38)
+
 ## 0.4.1
 
 ### Fixed
