@@ -33,7 +33,8 @@
     "hammurabi-check": "./dist/cli/check.js",
     "hammurabi-propose": "./dist/cli/propose.js",
     "hammurabi-select": "./dist/cli/select.js",
-    "hammurabi-lock": "./dist/cli/lock.js"
+    "hammurabi-lock": "./dist/cli/lock.js",
+    "hammurabi-verify": "./dist/cli/verify.js"
   },
   "exports": {
     ".": {
@@ -72,7 +73,7 @@
   "scripts": {
     "prebuild": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "tsc",
-    "postbuild": "chmod +x dist/cli/run.js dist/cli/check.js dist/cli/propose.js dist/cli/select.js dist/cli/lock.js",
+    "postbuild": "chmod +x dist/cli/run.js dist/cli/check.js dist/cli/propose.js dist/cli/select.js dist/cli/lock.js dist/cli/verify.js",
     "prepack": "npm run build",
     "prepublishOnly": "node scripts/preflight-publish.mjs",
     "typecheck": "tsc --noEmit",
