@@ -56,6 +56,11 @@ jobs:
       - name: Install npm CLI
         run: npm install -g npm@11.21.0
 
+      # npm reads bin paths before prepack. Build first so dist/cli/*.js
+      # is present for that check. dist/ stays gitignored.
+      - name: Build
+        run: npm run build
+
       - name: Publish
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -64,8 +69,10 @@ jobs:
           unset NODE_AUTH_TOKEN
           echo "npm $(npm --version)"
           log="$(mktemp)"
+          # Outside the repo. A userconfig in the worktree fails the clean-tree preflight.
+          npmrc="${RUNNER_TEMP}/npmrc.publish"
           cleanup() {
-            rm -f "$log" .npmrc.publish
+            rm -f "$log" "$npmrc"
             unset NODE_AUTH_TOKEN
           }
           trap cleanup EXIT
@@ -79,8 +86,8 @@ jobs:
           fi
           if [ -n "${NPM_TOKEN:-}" ] && grep -Eq 'ENEEDAUTH|E401|Unable to authenticate|need auth' "$log"; then
             echo "Trusted publishing was not accepted; retrying with NPM_TOKEN."
-            printf '%s\n' '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}' > .npmrc.publish
-            export NPM_CONFIG_USERCONFIG="${PWD}/.npmrc.publish"
+            printf '%s\n' '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}' > "$npmrc"
+            export NPM_CONFIG_USERCONFIG="$npmrc"
             export NODE_AUTH_TOKEN="$NPM_TOKEN"
             npm publish --provenance --access public
             exit 0
