@@ -55,22 +55,67 @@ const version = pkg.version;
 const tag = `v${version}`;
 
 // 2. On the release branch, in sync with origin, with nothing uncommitted.
-const branch = git("rev-parse", "--abbrev-ref", "HEAD");
-if (branch !== RELEASE_BRANCH) {
-  problems.push(`on branch '${branch}', not '${RELEASE_BRANCH}' — merge the PR first, then publish from ${RELEASE_BRANCH}`);
-}
-if (git("status", "--porcelain") !== "") {
-  problems.push("working tree is dirty — commit or stash before publishing");
-}
-try {
-  git("fetch", "origin", RELEASE_BRANCH, "--tags", "--quiet");
-  const local = git("rev-parse", "HEAD");
-  const remote = git("rev-parse", `origin/${RELEASE_BRANCH}`);
-  if (local !== remote) {
-    problems.push(`HEAD (${local.slice(0, 7)}) != origin/${RELEASE_BRANCH} (${remote.slice(0, 7)}) — push or pull first`);
+//    Tag publishes run in GitHub Actions (GITHUB_REF_TYPE=tag). That checkout
+//    is detached, so --abbrev-ref prints "HEAD". actions/checkout@v5 leaves
+//    fetch-tags false and then fetches `<sha>:refs/tags/<tag>`, replacing the
+//    annotated tag with a lightweight ref. `git fetch origin main --tags`
+//    then exits 1 with "would clobber existing tag" even though origin is
+//    reachable. The old catch reported that as "could not reach origin".
+//    Fetch only the branch refspec (the checkout extraheader still
+//    authenticates) when origin/main is missing, and accept the detached
+//    commit when it is an ancestor of origin/main. v<version> == HEAD is
+//    still enforced below.
+const actionsTag = process.env.GITHUB_REF_TYPE === "tag";
+if (actionsTag) {
+  if (git("status", "--porcelain") !== "") {
+    problems.push("working tree is dirty — commit or stash before publishing");
   }
-} catch {
-  problems.push("could not reach origin to verify HEAD is pushed");
+  const remoteRef = `refs/remotes/origin/${RELEASE_BRANCH}`;
+  let remoteOk = false;
+  try {
+    git("rev-parse", "--verify", "--quiet", remoteRef);
+    remoteOk = true;
+  } catch {
+    try {
+      git(
+        "fetch",
+        "--quiet",
+        "origin",
+        `refs/heads/${RELEASE_BRANCH}:${remoteRef}`,
+      );
+      git("rev-parse", "--verify", "--quiet", remoteRef);
+      remoteOk = true;
+    } catch {
+      problems.push("could not reach origin to verify HEAD is pushed");
+    }
+  }
+  if (remoteOk) {
+    try {
+      git("merge-base", "--is-ancestor", "HEAD", `origin/${RELEASE_BRANCH}`);
+    } catch {
+      problems.push(
+        `HEAD is not an ancestor of origin/${RELEASE_BRANCH} — tag publishes must be commits on ${RELEASE_BRANCH}`,
+      );
+    }
+  }
+} else {
+  const branch = git("rev-parse", "--abbrev-ref", "HEAD");
+  if (branch !== RELEASE_BRANCH) {
+    problems.push(`on branch '${branch}', not '${RELEASE_BRANCH}' — merge the PR first, then publish from ${RELEASE_BRANCH}`);
+  }
+  if (git("status", "--porcelain") !== "") {
+    problems.push("working tree is dirty — commit or stash before publishing");
+  }
+  try {
+    git("fetch", "origin", RELEASE_BRANCH, "--tags", "--quiet");
+    const local = git("rev-parse", "HEAD");
+    const remote = git("rev-parse", `origin/${RELEASE_BRANCH}`);
+    if (local !== remote) {
+      problems.push(`HEAD (${local.slice(0, 7)}) != origin/${RELEASE_BRANCH} (${remote.slice(0, 7)}) — push or pull first`);
+    }
+  } catch {
+    problems.push("could not reach origin to verify HEAD is pushed");
+  }
 }
 
 // 3. The version being published is tagged, and the tag is this commit. This

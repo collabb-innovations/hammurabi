@@ -54,7 +54,7 @@ present only on an unmerged branch.
 ## What preflight refuses
 
 - cwd is not the git root, or is not this package
-- HEAD is not on `main`, working tree dirty, or HEAD not pushed to `origin/main`
+- HEAD is not on `main`, working tree dirty, or HEAD not pushed to `origin/main`. A tag-triggered Actions checkout is detached HEAD; that is accepted only when `GITHUB_REF_TYPE=tag`, HEAD is the `v<version>` commit, and that commit is an ancestor of `origin/main`
 - `v<version>` tag missing, or pointing at a different commit than HEAD
 - the version is already on npm
 
