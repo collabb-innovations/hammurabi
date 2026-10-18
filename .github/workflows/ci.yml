@@ -136,3 +136,21 @@ jobs:
             exit 1
           fi
           echo "ok — preflight ran and refused deliberately"
+
+  worker:
+    name: worker bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      # Bundles the worker entry the way workerd/wrangler would. Fails on any
+      # unresolved import or Node builtin, including dynamic import().
+      - name: Bundle worker entry for workerd
+        run: npm run check:worker

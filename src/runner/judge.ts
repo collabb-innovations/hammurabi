@@ -2,9 +2,8 @@ import type { Spec } from "../schema/spec.js";
 import type { Criterion } from "../schema/rubric.js";
 import type { Fixture } from "../schema/fixture.js";
 import type { CriterionScore, JudgeVote } from "../schema/report.js";
-import { SYS_JUDGE } from "./client.js";
-import { callJudge } from "./providers.js";
-import type { JudgeCallRequest, JudgeCallResponse } from "./providers.js";
+import { SYS_JUDGE } from "./prompt.js";
+import type { JudgeCallRequest, JudgeCallResponse } from "./judge-types.js";
 import type { ExcludedJudge } from "./excluded-judges.js";
 import type { Aggregator, JudgeConfig } from "./types.js";
 
@@ -50,7 +49,10 @@ async function judgeFixtureOne(args: JudgeOneArgs): Promise<JudgeOneScore[]> {
   const fixtureBlob = formatFixtureBlock(fixture);
   const outputBlob = formatOutputBlock(output);
 
-  const call = judgeCall ?? callJudge;
+  if (!judgeCall) {
+    throw new Error("judgeCall is required");
+  }
+  const call = judgeCall;
   const { scores } = await call({
     provider: judge.provider ?? "anthropic",
     model: judge.model,
