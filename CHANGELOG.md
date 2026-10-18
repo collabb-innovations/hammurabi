@@ -20,6 +20,12 @@
   An explicit selection file overrides parsed checkboxes per decision.
   Credential and network failures exit 2 and name the cause.
 
+## 0.6.0
+
+### Added
+
+- Add `@collabb/hammurabi/worker` (#41)
+
 ## 0.5.1
 
 ### Added
