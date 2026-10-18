@@ -1,4 +1,3 @@
-import { unsetJudgeApiKeyEnv } from "./providers.js";
 import type { JudgeConfig } from "./types.js";
 import type { Spec } from "../schema/spec.js";
 import type { Rubric } from "../schema/rubric.js";
@@ -44,9 +43,12 @@ export function shouldRefuseMissingJudgeKeys(
  * Config error, not a transient blip — the spec asked for a panel this
  * environment cannot call.
  */
-export function refuseMissingJudgeKeys(judges: JudgeConfig[]): void {
+export function refuseUnsetKeys(
+  judges: JudgeConfig[],
+  probe: (judge: JudgeConfig) => string | undefined,
+): void {
   for (const judge of judges) {
-    const env = unsetJudgeApiKeyEnv(judge);
+    const env = probe(judge);
     if (!env) continue;
     throw new Error(
       `judge ${judge.model}: environment variable ${env} is not set — refusing to run a panel that cannot be staffed`,

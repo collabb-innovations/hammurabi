@@ -3,70 +3,34 @@ import { GoogleGenAI } from "@google/genai";
 import { client as anthropicClient } from "./client.js";
 import { zodOutputFormatV4 as zodOutputFormat } from "./zod-format.js";
 import { JudgeResponseSchema } from "./schema.js";
-import type { JudgeProvider, ReasoningEffort } from "../schema/spec.js";
+import type { JudgeProvider } from "../schema/spec.js";
 import type { ChatCompletionCreateParamsNonStreaming } from "openai/resources/chat/completions";
+import type { JudgeCallRequest, JudgeCallResponse } from "./judge-types.js";
+import {
+  BASE_MAX_TOKENS,
+  buildDeepSeekParams,
+  buildOpenAICompatibleParams,
+  hostIsNonNativeDeepSeek,
+  isReasoningModel,
+  joinBlocks,
+  JSON_INSTRUCTION,
+  JUDGE_JSON_SCHEMA,
+  parseJudgeJson,
+  reasoningToOpenAIEffort,
+  reasoningToTokens,
+  resolveCompatibleEndpoint,
+} from "./judge-pure.js";
 
-/**
- * Provider-agnostic judge call. Each fixture's output is scored by one or more
- * judges that may run on different providers — cross-provider panels are the
- * core bias-mitigation device, so a judge must never share the output's
- * provider. This module is the single seam where a provider's SDK is touched.
- */
-export interface JudgeCallRequest {
-  provider: JudgeProvider;
-  model: string;
-  /** Reasoning effort for this judge. "none" ⇒ no extended thinking. */
-  reasoning: ReasoningEffort;
-  /** System context. `cache: true` blocks are cached on providers that support it. */
-  systemBlocks: { text: string; cache?: boolean }[];
-  userMessage: string;
-  /** Endpoint base URL — `openai_compatible` judges only (spec `base_url`). */
-  baseUrl?: string;
-  /** Env var holding the endpoint's API key — `openai_compatible` judges only (spec `api_key_env`). */
-  apiKeyEnv?: string;
-}
-
-export interface JudgeCallResponse {
-  scores: { criterionId: string; score: number; reasoning: string }[];
-}
-
-const BASE_MAX_TOKENS = 16384;
-
-type OpenAICompatibleCompletionParams = {
-  model: string;
-  messages: { role: "system" | "user"; content: string }[];
-  reasoning_effort?: "low" | "medium" | "high" | "none";
-  temperature?: number;
-  response_format?: { type: "json_object"; schema?: typeof JUDGE_JSON_SCHEMA };
-};
-
-// Hand-written so OpenAI's strict json_schema mode is satisfied without
-// coupling to any SDK's zod-version-specific schema helper.
-export const JUDGE_JSON_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    scores: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          criterionId: { type: "string" },
-          score: { type: "number" },
-          reasoning: { type: "string" },
-        },
-        required: ["criterionId", "score", "reasoning"],
-      },
-    },
-  },
-  required: ["scores"],
-} as const;
-
-const JSON_INSTRUCTION =
-  'Respond with ONLY a JSON object of this exact shape, no markdown fences:\n' +
-  '{"scores":[{"criterionId":"<id>","score":<number>,"reasoning":"<text>"}]}\n' +
-  "Return exactly one entry per criterion, keyed by the criterion's id.";
+export type { JudgeCallRequest, JudgeCallResponse } from "./judge-types.js";
+export {
+  FIREWORKS_DEFAULT_BASE_URL,
+  JUDGE_JSON_SCHEMA,
+  buildOpenAICompatibleParams,
+  isReasoningModel,
+  parseJudgeJson,
+  reasoningToOpenAIEffort,
+  reasoningToTokens,
+} from "./judge-pure.js";
 
 export async function callJudge(
   req: JudgeCallRequest,
@@ -194,38 +158,8 @@ async function callDeepSeek(req: JudgeCallRequest): Promise<JudgeCallResponse> {
 
 export function buildDeepSeekCompletionParams(
   req: JudgeCallRequest,
-): OpenAICompatibleCompletionParams {
-  // Non-native hosts (DEEPSEEK_BASE_URL remapped to e.g. Fireworks) speak the
-  // generic OpenAI-compatible wire shape. Delegating keeps that shape
-  // byte-identical with the fireworks/openai_compatible providers by
-  // construction — one builder, no drift.
-  if (isNonNativeDeepSeekHost()) return buildOpenAICompatibleParams(req);
-  // Native DeepSeek. Thinking is requested two ways and we honor both: an
-  // intrinsically-reasoning model (the deepseek-reasoner alias) OR a configured
-  // `reasoning` effort on a hybrid model (e.g. deepseek-v4-pro), mapped to
-  // OpenAI-style `reasoning_effort`. In thinking mode DeepSeek rejects
-  // `temperature`/`response_format` like OpenAI's reasoning models, so we pin
-  // the JSON shape via the prompt (JSON_INSTRUCTION) and parse it back instead.
-  // Native DeepSeek stays bare json_object (no schema-constrained decoding).
-  const effort = reasoningToOpenAIEffort(req.reasoning);
-  const reasoning = effort !== undefined || isReasoningModel(req.model);
-  return {
-    model: req.model,
-    messages: [
-      {
-        role: "system",
-        content: `${joinBlocks(req.systemBlocks)}\n\n${JSON_INSTRUCTION}`,
-      },
-      { role: "user", content: req.userMessage },
-    ],
-    ...(effort ? { reasoning_effort: effort } : {}),
-    ...(reasoning
-      ? {}
-      : {
-          temperature: 0,
-          response_format: { type: "json_object" as const },
-        }),
-  };
+): ReturnType<typeof buildDeepSeekParams> {
+  return buildDeepSeekParams(req, process.env.DEEPSEEK_BASE_URL);
 }
 
 // ---------------------------------------------------------------------------
@@ -234,9 +168,6 @@ export function buildDeepSeekCompletionParams(
 // `openai_compatible` is the escape hatch for any other OpenAI-compatible
 // endpoint, configured per judge entry via base_url/api_key_env.
 // ---------------------------------------------------------------------------
-
-export const FIREWORKS_DEFAULT_BASE_URL =
-  "https://api.fireworks.ai/inference/v1";
 
 // Cached per (baseURL, api-key env var), NOT a single singleton — one panel
 // can mix judges pointed at different hosts and keys in the same run.
@@ -263,20 +194,7 @@ export function resolveOpenAICompatibleEndpoint(req: JudgeCallRequest): {
   baseURL: string;
   apiKeyEnv: string;
 } {
-  if (req.provider === "fireworks") {
-    return {
-      baseURL: process.env.FIREWORKS_BASE_URL ?? FIREWORKS_DEFAULT_BASE_URL,
-      apiKeyEnv: "FIREWORKS_API_KEY",
-    };
-  }
-  // The spec schema requires both keys for openai_compatible; this guards
-  // callers that build a JudgeCallRequest directly.
-  if (!req.baseUrl || !req.apiKeyEnv) {
-    throw new Error(
-      `openai_compatible judge ${req.model} requires both base_url and api_key_env`,
-    );
-  }
-  return { baseURL: req.baseUrl, apiKeyEnv: req.apiKeyEnv };
+  return resolveCompatibleEndpoint(req, process.env.FIREWORKS_BASE_URL);
 }
 
 export async function callOpenAICompatible(
@@ -297,44 +215,6 @@ export async function callOpenAICompatible(
   const raw = completion.choices[0]?.message?.content ?? "";
   const who = req.provider === "fireworks" ? "Fireworks" : "OpenAI-compatible";
   return parseJudgeJson(raw, `${who} judge ${req.model}`);
-}
-
-/**
- * Completion params for any OpenAI-compatible host that serves
- * thinking-by-default hybrid models (Fireworks, Together, vLLM, …). This is
- * exactly the wire shape the DeepSeek-on-a-non-native-host path sends as of
- * v0.2.2: non-reasoning calls pin `reasoning_effort: "none"` explicitly (#17)
- * and carry the judge JSON schema in `response_format` for schema-constrained
- * decoding (#19); thinking calls omit `temperature`/`response_format` like
- * OpenAI's reasoning models, so the JSON shape is prompt-pinned
- * (JSON_INSTRUCTION) and parsed back instead.
- */
-export function buildOpenAICompatibleParams(
-  req: JudgeCallRequest,
-): OpenAICompatibleCompletionParams {
-  const effort = reasoningToOpenAIEffort(req.reasoning);
-  const reasoning = effort !== undefined || isReasoningModel(req.model);
-  return {
-    model: req.model,
-    messages: [
-      {
-        role: "system",
-        content: `${joinBlocks(req.systemBlocks)}\n\n${JSON_INSTRUCTION}`,
-      },
-      { role: "user", content: req.userMessage },
-    ],
-    ...(effort ? { reasoning_effort: effort } : {}),
-    ...(!reasoning ? { reasoning_effort: "none" as const } : {}),
-    ...(reasoning
-      ? {}
-      : {
-          temperature: 0,
-          response_format: {
-            type: "json_object" as const,
-            schema: JUDGE_JSON_SCHEMA,
-          },
-        }),
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -366,14 +246,6 @@ async function callGoogle(req: JudgeCallRequest): Promise<JudgeCallResponse> {
   });
 
   return parseJudgeJson(response.text ?? "", `Google judge ${req.model}`);
-}
-
-// ---------------------------------------------------------------------------
-// Pure helpers (unit-tested).
-// ---------------------------------------------------------------------------
-
-function joinBlocks(blocks: { text: string }[]): string {
-  return blocks.map((b) => b.text).join("\n\n");
 }
 
 /**
@@ -417,64 +289,8 @@ export function unsetJudgeApiKeyEnv(judge: {
   }
 }
 
-/** Normalize reasoning effort into an extended-thinking token budget. */
-export function reasoningToTokens(r: ReasoningEffort): number {
-  if (typeof r === "number") return Math.max(0, Math.floor(r));
-  switch (r) {
-    case "none":
-      return 0;
-    case "low":
-      return 1024;
-    case "medium":
-      return 4096;
-    case "high":
-      return 12000;
-  }
-}
-
-/** Map reasoning effort to OpenAI's reasoning_effort buckets. */
-export function reasoningToOpenAIEffort(
-  r: ReasoningEffort,
-): "low" | "medium" | "high" | undefined {
-  if (typeof r === "number") {
-    if (r <= 0) return undefined;
-    if (r <= 1500) return "low";
-    if (r <= 6000) return "medium";
-    return "high";
-  }
-  return r === "none" ? undefined : r;
-}
-
-export function isReasoningModel(model: string): boolean {
-  return /^o\d/i.test(model) || /^gpt-5/i.test(model) || /reason/i.test(model);
-}
-
 export function isNonNativeDeepSeekHost(
   baseURL = process.env.DEEPSEEK_BASE_URL,
 ): boolean {
-  if (!baseURL) return false;
-  return baseURL.replace(/\/+$/, "") !== "https://api.deepseek.com";
-}
-
-export function parseJudgeJson(raw: string, who: string): JudgeCallResponse {
-  const cleaned = raw
-    .replace(/```json/gi, "")
-    .replace(/```/g, "")
-    .trim();
-  if (!cleaned) throw new Error(`${who} returned empty output`);
-  let json: unknown;
-  try {
-    json = JSON.parse(cleaned);
-  } catch (e) {
-    throw new Error(`${who} returned non-JSON output: ${(e as Error).message}`);
-  }
-  const parsed = JudgeResponseSchema.safeParse(json);
-  if (!parsed.success) {
-    throw new Error(
-      `${who} output failed schema validation: ${parsed.error.issues
-        .map((i) => i.message)
-        .join("; ")}`,
-    );
-  }
-  return { scores: parsed.data.scores };
+  return hostIsNonNativeDeepSeek(baseURL);
 }

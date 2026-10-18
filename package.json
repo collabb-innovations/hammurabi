@@ -49,6 +49,10 @@
       "types": "./dist/runner/index.d.ts",
       "import": "./dist/runner/index.js"
     },
+    "./worker": {
+      "types": "./dist/worker.d.ts",
+      "import": "./dist/worker.js"
+    },
     "./loaders": {
       "types": "./dist/loaders/index.d.ts",
       "import": "./dist/loaders/index.js"
@@ -78,6 +82,7 @@
     "prepublishOnly": "node scripts/preflight-publish.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
+    "check:worker": "node scripts/check-worker-bundle.mjs",
     "smoke": "tsx examples/smoke/run.ts",
     "smoke:disk": "tsx examples/smoke/disk/run.ts"
   },
@@ -89,9 +94,10 @@
     "zod": "^3.25.0"
   },
   "devDependencies": {
-    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.28.2",
     "tsx": "^4.19.0",
-    "@types/node": "^22.0.0"
+    "typescript": "^5.6.0"
   },
   "engines": {
     "node": ">=20"

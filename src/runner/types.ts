@@ -6,7 +6,7 @@ import type {
 import type { Rubric } from "../schema/rubric.js";
 import type { FixtureSet } from "../schema/fixture.js";
 import type { Report } from "../schema/report.js";
-import type { JudgeCallRequest, JudgeCallResponse } from "./providers.js";
+import type { JudgeCallRequest, JudgeCallResponse } from "./judge-types.js";
 
 export interface JudgeConfig {
   model: string;
