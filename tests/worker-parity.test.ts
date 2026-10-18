@@ -102,3 +102,60 @@ test("node run and the worker entry return the same report for one llm fixture",
     else process.env.ANTHROPIC_API_KEY = previous;
   }
 });
+
+test("google thought parts are skipped and both entries still agree", async () => {
+  const previous = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = "test-key";
+  const googleKeys: JudgeKeys = { gemini: "test-key" };
+  const scores = JSON.stringify({
+    scores: [{ criterionId: "quality", score: 1, reasoning: "good" }],
+  });
+  const fetchImpl: typeof fetch = async () =>
+    new Response(
+      JSON.stringify({
+        candidates: [
+          {
+            content: {
+              parts: [
+                { text: "thinking out loud", thought: true },
+                { text: scores },
+              ],
+            },
+          },
+        ],
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  try {
+    const shared = {
+      spec,
+      rubric,
+      fixtures,
+      execute: async (input: unknown) => ({ echo: input }),
+      judges: [
+        {
+          provider: "google" as const,
+          model: "gemini-2.5-flash",
+          role: "primary",
+          reasoning: "low" as const,
+        },
+      ],
+    };
+    const nodeReport = await nodeRun({
+      ...shared,
+      judgeCall: (req) => fetchJudge(req, { keys: googleKeys, fetch: fetchImpl }),
+    });
+    const workerReport = await workerRun({
+      ...shared,
+      keys: googleKeys,
+      fetch: fetchImpl,
+    });
+    assert.deepEqual(comparable(nodeReport), comparable(workerReport));
+    assert.equal(workerReport.results[0]?.passed, true);
+    assert.equal(workerReport.results[0]?.scores[0]?.score, 1);
+    assert.equal(workerReport.results[0]?.error, undefined);
+  } finally {
+    if (previous === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = previous;
+  }
+});

@@ -172,10 +172,17 @@ async function callGoogle(
   const parts =
     (
       json as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[];
+        candidates?: {
+          content?: { parts?: { text?: string; thought?: boolean }[] };
+        }[];
       }
     ).candidates?.[0]?.content?.parts ?? [];
-  const text = parts.map((part) => part.text ?? "").join("");
+  // The Node SDK's response.text skips thought parts. Joining them prepends
+  // reasoning to the JSON and the judge fails schema parsing.
+  const text = parts
+    .filter((part) => part.thought !== true)
+    .map((part) => part.text ?? "")
+    .join("");
   return parseJudgeJson(text, `Google judge ${req.model}`);
 }
 
