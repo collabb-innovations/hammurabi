@@ -1,0 +1,245 @@
+---
+description: "Acceptance criteria are structural, already asserted where an invariant exists, and distinct after a PO-only action."
+alwaysApply: false
+---
+<!-- collabb-doctrine-pack: id=specs-acceptance version=1.0.0 sha256=81c3380d4ea87ef7311880cf392a9502226cbd1bd646af26e68632eeca0b9f1c doctrines=10,21,38,66 -->
+## Doctrine 10
+
+**A customer deliverable is produced by a versioned playbook and an eval —
+never by a person improvising in a session.** *(WSJF prioritization pass,
+2026-08-05.)* The first engagements are human-assisted, which makes it
+cheapest in the moment to just do the work in a session and hand the output
+over. Do that twice and the company is an agency: the value lives in the
+operator, nothing compounds, and the runtime gets built later against
+remembered requirements instead of recorded ones. Every artifact a customer
+receives must trace to a committed playbook and a gate that was made to go
+red. Then productization is *extraction* from something that already works,
+and the services phase is paid requirements-gathering for the runtime rather
+than a detour around it. See `docs/MVP-WSJF-2026-08-05.md`.
+
+## Doctrine 21
+
+**An acceptance criterion that greps source text for a literal is
+self-invalidating. Assert structure structurally.** *(W-49 retro, 2026-08-09
+— two instances in one iteration.)* Doctrine 7's W-28 amendment says to run a
+criterion before the lock. W-49 did. **Both criteria still broke**, because
+running one proves it is *true now*, not that it is *stable under the
+implementation it was written to check*.
+
+* **AC-7** was `grep -c 'workflow_dispatch' <workflow> → 1`. It genuinely
+  returned `1` and was executed pre-lock. Then the implementation added a
+  comment block *explaining why `workflow_dispatch` was retained* — count
+  became `2`. This is F-17's AC-12 defect (doctrine 7) reproduced verbatim,
+  in the same session in which that doctrine was read.
+* **AC-11** was `grep -c '<stale instruction>' <runbook> → 0`. The
+  implementation rewrote the runbook and added a note explaining what the
+  instruction *used to say* — quoting it word-for-word. Count: `1`.
+
+The pattern: **a criterion that scans prose is broken by the prose written to
+satisfy it.** The better a change is documented, the more likely its own
+criterion fails. Running it pre-lock cannot detect this; the invalidating
+text does not exist yet.
+
+**The fix is not "grep more cleverly" and not "stop writing comments."**
+Where the thing being asserted has structure — a workflow's trigger set, a
+JSON key, a YAML step order, a package `bin` — parse it and assert the parsed
+value. W-49's replacement asserted `sorted(on.keys())` and step *indices*, and
+is immune to any amount of surrounding commentary. Reserve text greps for
+things that genuinely are text.
+
+**And when a text grep IS right, repair in the correct direction — it is not
+always the criterion.** W-49's two cases went opposite ways, and getting this
+backwards silently removes a real control:
+
+| | What the literal was | Right repair |
+|---|---|---|
+| AC-7 | a keyword appearing in a comment — harmless | fix the **criterion** (parse it) |
+| AC-11 | a stale *instruction* sitting in a runbook — someone will grep, find it, and follow it | fix the **document** |
+
+Ask what the match *means*. If a reader hitting that text would be misled,
+the document is the defect and the criterion just did its job. If they would
+not, the criterion was measuring the wrong thing. "My grep matched my own
+comment" invites one reflex; it was the wrong one half the time here.
+
+**The same brittleness applies to counts in the acceptance checklist.**
+*(W-16 retro, 2026-08-09.)* F-30's checklist said the unit suite returns
+"33 pass". It returns 30 — all passing, no criterion unmet, but the number
+was written at the end of the session and never executed, and the acceptance
+gate caught it by running it. A checklist is the last artifact written and
+the one most likely to carry an asserted number. Two habits fix it: name the
+**command and its stable pass condition** (`→ 0 fail`) rather than a count
+that any future test addition invalidates, and treat any number you type
+into a checklist as a toolchain claim that must come from a command you just
+ran (doctrine 7's W-28 amendment, which this violated *inside the checklist
+whose purpose is catching it*).
+
+**The sharpening — "assert structure structurally" is not enough when the
+STRUCTURE DOES NOT EXIST YET.** *(W-27 retro, 2026-08-11 — three instances
+in one item, by the session that wrote the warning.)* F-35's acceptance
+section opens by citing this doctrine and promising every criterion asserts
+structure rather than prose. Three then broke anyway (AC-1 a heading count,
+AC-4 an absence-of-a-token, AC-6 a link convention the file does not use),
+and the pattern separating them from the ones that held is exact:
+
+| Criterion | Asserted against | Held? |
+|---|---|---|
+| AC-2/AC-3 step indices | `commands/loop.md`, **already existed** | yes |
+| AC-1 heading count | a playbook **not yet written** | no — 7 vs 9 |
+| AC-6 link style | a list style **not looked at** | no — code spans, not links |
+
+A structural assertion about an artifact that does not exist yet is not a
+measurement, it is **a guess about your own future design** wearing a
+parser's authority. AC-1 said 7 headings; the finished playbook needed two
+unnumbered appendices, so the count was wrong the moment the file got good.
+
+Two fixes, both cheap. **Anchor criteria to artifacts that already exist**
+wherever possible — indices in a file you can open today are stable in a way
+counts in a file you have not written are not. Where the artifact is new,
+assert an **invariant you control** (`the numbered sections are 1..n, in
+order`, which survives any appendix) rather than a **quantity you predicted**.
+
+And the meta-lesson, which is the uncomfortable one: reading a doctrine
+immediately before doing the work does not prevent the doctrine's failure.
+All three of these were written minutes after quoting doctrine 21 in the
+same document. Prose in your own context is not a control either — the same
+thing doctrine 12 says about subagent prompts, pointed at yourself.
+
+**Mechanical fix for the commonest shape: an ABSENCE assertion over source
+must strip comments before scanning.** *(W-42 retro, 2026-08-15 — three
+instances in one item, which makes it a pattern rather than three slips.)*
+Every criterion of the form "token X does not appear in file Y" was broken
+by the comment written to document the property it asserts:
+
+| Criterion | Matched its own | Count |
+|---|---|---|
+| AC-1 "the adjudicator is pure" | `// No fetch. No node:fs. No process.env.` | 1, wanted 0 |
+| AC-3 "no judge bypass exists" | `// …the operator remembers to pass --judge` | 1, wanted 0 |
+| AC-17 "no artifact still says the gap is open" | the spec's own quotation of the sentence | 2, wanted 0 |
+
+The direction of the correlation is the point: **the better you document a
+property, the more certainly its own absence-check fails.** So an item that
+writes careful comments is the item most likely to ship a broken criterion,
+and "grep more cleverly" scales badly because each author rediscovers it.
+
+The repo already had the answer and nobody reused it —
+`scripts/collabb-new/tests/run.sh` AC-12 strips comment lines first, and its
+own comment records that anchoring on raw text was tried and rejected
+(doctrine 38, unlearned). W-42 shipped `scan_code()` in
+`scripts/redact-judge-mutations.sh` doing the same for `.mjs`. **Before
+writing any absence-over-source criterion, look for an existing
+comment-stripping scanner and use it; if you write a new one, expect the
+next item to need it too.**
+
+## Doctrine 38
+
+**Before writing an acceptance criterion for an invariant, grep for whether the
+invariant is already asserted. Re-inventing a control silently downgrades it.**
+*(W-34 retro, 2026-08-12.)* Doctrine 21 is about criteria that are *brittle*.
+This one was worse and in the opposite direction: it was **weaker than the check
+that already shipped**.
+
+F-40's AC-15 asserted that `repo-gates.yml` gains no install step, and specified
+the mechanism — scan the lines matching `^ *run:`. It was run before the lock and
+returned 0, so doctrine 7's amendment was satisfied. But `tests/run.sh` had
+asserted that same invariant since F-14, by stripping comments and scanning
+**every** remaining line — and its comment records that anchoring on `run:` was
+tried and *rejected*, because `run: |` puts the install on its own line and
+evades it. Implementing the locked criterion literally would have replaced a
+working control with one that misses the ordinary multi-line form.
+
+The criterion was invented rather than derived, because nobody grepped for the
+invariant's existing owner. Cost here was one round trip and a spec correction;
+the cost when the weaker check is the one that ships is a control everyone
+believes in. **A criterion for an existing invariant should name and re-run the
+existing assertion, not describe a fresh mechanism for it.** Where the new
+wording and the shipped check disagree, assume the shipped check won its shape
+the hard way and find out why before overruling it — the reason is usually
+written next to it.
+
+*Sharpening — an ITEM whose problem statement says "nothing checks X" is
+making the same claim, and it is an absence claim, which is the kind that rots
+silently.* **(W-40 retro, 2026-08-14.)** Doctrine 38 is written about criteria.
+W-40 was filed saying the two config templates are hand-synced and "nothing
+gates their agreement", naming only one check as insufficient. A second check
+had existed since **the same commit that created the fork**, nine days before
+the item was filed. Nobody had looked.
+
+The item was still right, and for a worse reason than it claimed: the existing
+check compares key *sets*, the drift changed a *value*, and it was **green
+across the entire drift** — reproduced against the pre-fix upstream with a
+clean baseline. So the finding inverted from "no gate exists" to "the gate
+exists and is blind", which is a different item with a different fix.
+
+The cost landed at the design panel. Sketches were handed the precedent for
+*one* existing mechanism and not the other, and one duly proposed, as its
+headline component, **a re-implementation of the check that already shipped** —
+doctrine 38's exact defect, committed by a panel because the orchestrator gave
+it an incomplete inventory. Two habits, both cheap: at Phase 2, treat every
+"nothing checks X" in an item body as a claim to falsify with a grep before
+drafting; and **hand the design panel the list of what already exists**, since
+a sketch cannot avoid re-inventing a control it was never told about.
+
+*Corollary — the mechanism you build to catch a class must cover all of that
+class.* The same item added a `--anchors` dry pass so mutation patterns can be
+re-verified in a second instead of a twenty-minute run (doctrine 33). It covered
+the mutation table and **not** the compound-mutation anchors declared twenty
+lines below it — so a compound anchor rotted when its target was rewritten, and
+that rot surfaced only in a full run, which is precisely what the dry pass exists
+to avoid. When you build a fast path for one shape of a check, enumerate the
+other shapes before calling it done.
+
+## Doctrine 66
+
+**A criterion describing the state AFTER a PO-only action has never been
+executed by anyone. It is a distinct class, and it is where the defects
+are.** *(W-52 second rework, 2026-08-19 — an item was accepted and
+un-accepted in the same session; five defects, all in that class.)*
+
+Doctrine 7's W-28 amendment says run every command-shaped criterion before
+the lock. Doctrine 20's W-47 amendment says execute *every* one, because the
+skipped one is the one whose mechanism you assumed. W-52 obeyed both as far
+as they can be obeyed — **fifteen criteria re-executed at the gate, fifteen
+matched** — and was accepted on that evidence.
+
+Two criteria could not be executed, by construction: they described the state
+after *applying the guardrail queue*, which the guard reserves to the PO. The
+PO applied. **Both were wrong**, and behind them were three more defects of
+the same shape:
+
+| | Coupled to the pre-apply world |
+|---|---|
+| the write-guard battery | rebuilt a patched copy unconditionally in 1 of its 4 sections — the patches cannot apply to a hook they are already in |
+| a patch's currency probe | expected its own spec ID from a clause it merely *widened*, which denies in its original owner's name |
+| the queue README | documented a staleness rule the gate did not implement |
+| the mutation harness | asserted a baseline true only while an unapplied REPAIR sat past its SLA — so it refused to run at all, in the state the item exists to create |
+| two harness fixtures | keyed on wording a sibling patch rewrites, so they read the neighbour's state, not their own |
+
+The pattern is one thing, not five: **an artifact written while X is false
+quietly assumes X is false**, and every gate you run before the action
+confirms that assumption rather than testing it. A green suite here is not
+weak evidence — it is *evidence about the other world*.
+
+Note what makes this worse than ordinary staleness. The item's whole purpose
+was to make the PO apply the queue. So the success condition and the
+invalidating event **are the same event**, and the proof that the item worked
+is destroyed by the item working.
+
+Three habits, and the first is nearly free:
+
+* **At lock time, mark every criterion whose truth depends on an action the
+  session cannot take.** They are not ordinary criteria; they are
+  *predictions*. Write them as predictions, and say what would falsify each.
+* **Budget the first execution as part of the item, not as the confirmation
+  that ends it.** Here it produced five defects, a reversed acceptance and a
+  full rework — after the checklist had already gone fifteen-for-fifteen.
+* **Ask of every artifact the item ships: does this still work once the
+  action is taken?** Grep for the assumption rather than the file — anything
+  that rebuilds, patches, or asserts "not yet applied" is a candidate. The
+  write-guard battery had the correct pattern in three of four sections
+  already (doctrine 62's call-site problem, in a harness).
+
+Corollary worth its own line: **the refusal you add for one instance will
+find the others.** The mis-aimed-probe refusal added for the second defect
+immediately flagged two more, inside the harness's own fixtures — which is a
+gate doing what doctrine 18 asks and being aimed at itself.
+

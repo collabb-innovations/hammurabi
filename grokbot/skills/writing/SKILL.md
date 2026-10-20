@@ -1,0 +1,129 @@
+---
+name: "writing"
+description: "Cut AI tells, and write one document mode a tired reader understands on the first pass. Load when: Load when writing or editing prose, docs, a review description, a commit message, or any text a person will read."
+---
+<!-- collabb-doctrine-pack: id=writing version=1.0.0 sha256=3ed303814e42b53d044cce32dd33fba4cdd02f7d41f0e5cfbc68f8fbe24a7cc5 doctrines=98,99 -->
+# Writing
+
+Two layers. Rule 98 is the pattern catalog. Rule 99 picks the document mode and the sentence shape. When they disagree, 98 wins. The parenthesis allowance in some style guides does not override rule 13.
+
+## Doctrine 98
+
+Unslop
+
+Edit text to remove machine-written patterns. Scan for the patterns below, then rewrite. Preserve meaning and match the intended tone.
+
+Rule numbers are stable ids. A removed rule leaves a gap.
+
+### Content
+
+3. Superficial "-ing" phrases. "highlighting", "ensuring", "reflecting", "showcasing", "fostering". Delete them, or expand them with a real source.
+5. Vague attributions. "Experts believe", "Industry reports suggest", "Some critics argue". Name the source or delete the claim.
+
+### Language
+
+7. Machine vocabulary. Additionally, crucial, delve, enduring, enhance, fostering, garner, interplay, intricate, landscape as an abstraction, pivotal, showcase, tapestry as an abstraction, testament, underscore, vibrant. Replace with plain words.
+8. Fancy ways to say "is". "serves as", "stands as", "boasts", "features". Say "is" or "has".
+9. "Not just X, but Y." State the point directly.
+10. Rule of three. Do not force ideas into groups of three. Use the natural number.
+11. Synonym cycling. Pick one name and repeat it.
+12. False ranges. "from X to Y" where X and Y are not on one scale. List the topics.
+
+### Style
+
+13. Em dash overuse. Do not use em dashes. Use periods or commas only. No parentheses, no en dashes, and no hyphen standing in for a dash. If a thought needs separation, end the sentence or use a comma.
+14. Colon overuse. A colon is fine before a list or an example, not as a mid-sentence connector. Rewrite so the point stands without a comparison crutch.
+15. Boldface overuse. Do not bold every proper noun or acronym.
+16. Inline-header lists. The tell is a bold label and a colon that restates the line. Convert those to prose. A bold lead-in that ends in a period, names the item, and is followed by genuinely new detail is fine.
+17. Title case headings. Use sentence case.
+18. Decorative emojis. Remove them from headings and bullets.
+19. Curly quotes. Use straight quotes.
+
+### Communication artifacts
+
+20. Chatbot phrases. "I hope this helps", "Let me know if", "Of course", "Certainly", "Found the smoking gun". Remove them.
+22. Sycophantic tone. "Great question", "You're absolutely right". Respond directly.
+
+### Filler
+
+23. Filler phrases. "In order to" becomes "To". "Due to the fact that" becomes "Because". Delete "It is important to note that".
+24. Excessive hedging. A stack of "could potentially possibly" becomes "may", or a fact.
+25. Generic conclusions. "The future looks bright." State a specific plan or a fact.
+
+### Jargon
+
+26. Abstract metaphor nouns. Substrate, wedge, vector, locus, vantage, nexus, primitive as a noun, harness as a metaphor, surface as in "API surface", bedrock, scaffolding as a metaphor, modality, paradigm, gold-plating, ratchet as a metaphor, evacuate for moving code, endgame, north star, flywheel. These read as technical and usually have a plainer word. Use the concrete word.
+
+### Plain speech
+
+27. Say what it does, not how it feels. Name the mechanism or a number. Ask what the sentence tells the reader to do or know, then write that. If you cannot restate it as an instruction, a fact, or a number, cut it. If the sentence could appear unchanged in another project's docs, it says nothing about this one. Cut it.
+28. Shorten or split a dense sentence. If the reader backtracks, break it in two or drop a clause. One idea per sentence. Mix lengths on purpose. A short sentence lands a point. A longer one may carry one fact with its condition. One idea is not one length.
+29. Active voice. Name the actor. "queries are validated" becomes "the compiler validates queries". Passive is fine only when the actor is unknown or genuinely does not matter.
+30. Cut an adverb, or use a stronger verb. "runs quickly" becomes "is fast" or the number. An adverb propping up a weak verb means the verb is wrong.
+31. Prefer the plain word. "utilize" and "leverage" become "use". "facilitate" becomes "help". "numerous" becomes "many". "in the event that" becomes "if".
+32. Mannered prose. Metaphor or flourish where a literal phrase exists. Aphorisms, rhetorical fragments, personified code, figurative verbs, stock framing. Say what you mean. Rule 26 covers the metaphor nouns.
+33. Over-compression. Dropped articles, verbless fragments, symbol-speak, and abbreviations that make the reader decode. Write whole sentences, with their articles and verbs. Spell out arrows and abbreviations.
+
+## Doctrine 99
+
+Document mode and sentences
+
+Write so a tired engineer understands on the first read. Three rules sit above the layers.
+
+- Cut every word that does no work. If the sentence survives without a word, the word goes.
+- Use the short, everyday word. A long word has to buy its length with precision.
+- When a rule makes a sentence worse, fix the sentence another way or leave it alone. A sentence that follows every rule and sounds like a machine wrote it has failed.
+
+Use the codebase as the word list. Write the real symbol, file, flag, or command. Do not invent jargon. A named pattern is fine when the doc says what it means the first time.
+
+### Pick one mode
+
+One document, one mode. Two questions pick it. Does the content inform action or understanding? Does it serve learning or work?
+
+- Action and learning: a tutorial. Open with what the learner will build. Every step produces a visible result. Say what they should see. Cut explanation to one clause and a link. Write steps as commands.
+- Action and work: a how-to. Solve a problem a person has. Assume competence. Action only. Name the guide by the task.
+- Understanding and work: a reference. Only describe. No instruction, no persuasion, no opinion. State facts, options, limits, and errors. Mirror the structure of the thing described.
+- Understanding and learning: an explanation. One bounded topic. Anchor on a real why. Design decisions, constraints, and alternatives belong here. Opinion is allowed here and nowhere else.
+
+Do not mix modes. No reference table inside a tutorial, no tutorial inside a reference, no argument inside a how-to. Split and link.
+
+### Sentences
+
+- Talk to the reader as "you", in the present tense. "Will" only for something that genuinely happens later.
+- Say who does what. Write an instruction as a command. Never "should be done".
+- Put the condition before the instruction. Put the common case first.
+- No buzzwords, no figurative language, no "please" in an instruction, and never "simply", "easy", or "quickly" in a procedure.
+- Do not pre-announce. Do not start consecutive sentences with the same phrase.
+- Link with words that say where the link goes. Never "click here".
+- Headings carry the point, not only the topic. Sentence case. A task heading is a bare verb phrase. A concept heading is a noun phrase. One top-level heading, no skipped levels.
+- Numbered lists for sequences, bullets for everything else. Introduce a list with a complete sentence. Keep items parallel.
+- Code in code font. UI elements in bold. Use serial commas. Do not end a list with "etc." Say up front that a list is partial.
+
+### One statement at a time
+
+- One instruction per sentence. One thought per sentence everywhere else.
+- Split an instruction longer than about twenty words, and any other sentence longer than about twenty-five, unless the long sentence carries one thought that would break if split.
+- Put the warning or the condition before the step it guards.
+- Keep "the" and "a". "Remove backup file" reads two ways.
+- Give each word one meaning, then keep it. Pick one verb per action.
+- Write a procedure as a direct command, never as narration and never in the passive.
+- Avoid "-ing" words where you can. Rule 3 names the worst of them.
+
+### One reading
+
+- Keep "only" and "not" next to the word they change.
+- Break a long noun string into a phrase a person can say.
+- Make every "it", "they", and "this" point at one obvious noun. Repeat the noun when in doubt. Do not let "this" point at a whole clause.
+- Do not drop a verb in the second half of a sentence.
+- Keep the small words that show structure, such as "that" when dropping it makes two readings.
+- Repeat the article in a series when it prevents a misread.
+- Say which parts "and" or "or" joins when a sentence can group two ways.
+- Use periods, not semicolons. Replace an em dash with a new sentence. Rule 13 already bans the dash and the parenthesis.
+- No slashes in prose. Write "a, b, or both".
+- Call each thing by one name. A doc that uses three names for one thing teaches three things.
+
+### Reviews and commits
+
+A review description and a commit message are writing. Every layer except the mode compass applies. A review body is a briefing a person can read in under a minute. Do not paste run logs, commit lists, or metric tables. Link them. Product UI strings are not documentation.
+
+Be specific. Not "schema changes can cause issues", but "a column rename fails the build". Have a view in an explanation. Stay dry in a reference.

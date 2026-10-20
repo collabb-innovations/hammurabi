@@ -1,0 +1,215 @@
+---
+name: "specs-premises"
+description: "A single source, a toolchain claim, a prerequisite, and a spec number expire and have to be re-checked. Load when: Phase 2–3, when a spec treats a source, a toolchain, a prerequisite, or the next spec number as settled."
+---
+<!-- collabb-doctrine-pack: id=specs-premises version=1.0.0 sha256=ae3897bda8028f7d3c9ae2ead2fb41009fac5b457e00b4558f4d71fac1e2e15a doctrines=6,7,8,19,27 -->
+## Doctrine 6
+
+**"Make X the single source" is not lockable until X's transitive
+dependencies are checked against the target environment.** *(F-11 retro,
+2026-08-05.)* Before locking a decision that consolidates an implementation,
+walk what it CALLS, not just what it is. F-11 locked "app/ owns `compile()`,
+the gate imports it" — then implementation found `compile()` calls
+`latitude()`, which read the filesystem, so it could never have run in a
+Worker. Moving the file would not have produced a single source. The fix
+(I/O at the edge, pure rules in the middle) was right, but it was a design
+decision discovered at build time on locked text. Cost of the check at spec
+time: one call-graph read.
+
+## Doctrine 7
+
+**A design sketch's toolchain claims are UNVERIFIED until you run them.**
+*(F-11 retro, 2026-08-05 — now observed in two consecutive iterations.)*
+Sketch agents assert package names, version pins, CLI flags, config keys,
+and export paths from memory, fluently and wrongly, even when the prompt
+asks them to mark uncertainty. F-10's panel produced 3 verified fabrications;
+F-11's produced 3 more (a `vitest` pin that fails peer resolution, a
+`node --test <dir>` form that is broken on the installed Node, and a
+description of a gate rule that was exactly inverted). **Every named
+package, version, flag, and export goes into the spec only after the
+orchestrator has run it or read it in `node_modules`.** This is doctrine 1
+("don't invent things") applied to the panel's output specifically — the
+panel is a source to verify, never a source to quote.
+**Your own acceptance criteria are unverified until you run them.**
+*(W-28 retro, 2026-08-05.)* Doctrine 7 is usually aimed at the panel, but the
+orchestrator writes checkable claims too. F-17's AC-12 asserted that
+`grep -c "npm ci" .github/workflows/repo-gates.yml` returns `0`. It has
+returned `1` since F-11 — the string sits inside an explanatory comment. The
+criterion was unsatisfiable the moment it was written, nobody had run it, and
+it survived spec lock into implementation before failing. **Any acceptance
+criterion that names a command and an expected output is a toolchain claim.
+Run it before the lock, not after.**
+**And write it so the GATE can run it — a criterion naming a program but not
+its arguments is re-run by guesswork, and a wrong guess is indistinguishable
+from a red baseline.** *(W-32d acceptance gate, 2026-08-15.)* F-50's checklist
+said "append an absolute home path to a copy of the committed example →
+`validate-audit-report.mjs` → exit 1". The program takes the **report.md**
+path; handed the example's directory it exits **2** with
+`[IO] missing sibling report.json`. So the first attempt at the baseline —
+the step doctrine 32 requires *before* the attack — came back non-zero, which
+reads as "the criterion is failing" rather than "you called it wrong". The
+author knew the invocation and never wrote it down, because at implementation
+time it is ambient. At the gate it is not: the gate re-runs from a cleared
+context, which is the entire reason it catches stale claims. **Every
+command-shaped checklist line carries the literal, copy-pasteable command,
+including paths and flags** — not a program name and a verb. Cost here was one
+round trip; the failure mode it risks is a false rework, decided at the one
+step designed to prevent false confidence in the other direction.
+**The judge is not exempt — verify its corrections too.** *(F-16 retro,
+2026-08-05, fifth consecutive iteration.)* F-16's judge correctly disproved a
+sketch's parser rule by running it, then shipped a replacement rule that
+leaked on a case it had not tested. The correction mechanism fabricates at
+the same rate as the thing it corrects, and it arrives wearing the authority
+of having just caught someone else. Run the judge's fix against a fixture the
+judge did not write.
+
+## Doctrine 8
+
+**An item is not selectable until its prerequisites exist as items.**
+*(F-15 retro, 2026-08-05.)* `selectNextEligible()` can only check the deps an
+issue *declares*. It cannot see a prerequisite nobody ever filed. W-4 was
+selected with both declared deps accepted, and its Phase 2 immediately hit
+the fact that the orchestrator it needed had no ledger entry at all — F-11's
+spec deferred to "F-12" six times, three shipped source comments pointed at
+the same absent owner, and that spec number was already spent on another
+item. Cost: a Phase-2 restart. **At Phase 2, before drafting: grep the specs
+of the item's accepted dependencies for forward references — "that is F-n",
+"deferred to", "is F-n's item" — and confirm each names a real, open ledger
+item.** A deferral in an accepted spec is a promise the ledger has to be able
+to keep.
+
+## Doctrine 19
+
+**An item's premises expire; re-verify them at Phase 2, not at Phase 4.**
+*(W-31 retro, 2026-08-06.)* W-31's issue body and the WSJF pass that spawned
+it both named `mailroom` as the audit target, on the correct grounds that it
+is real and was not written by the auditor. **By the time the item ran, W-28
+had already audited `mailroom` and committed its report as the worked example
+the report template was built from** — making it the *most* anticipated
+repository we own, and inverting the item's entire premise. Both documents
+were dated the same day; the recommendation was true when written and false
+when read, and nothing in the ledger surfaces that transition.
+Doctrine 8 says an item is not selectable until its prerequisites exist as
+items. This is its mirror: **an item's stated facts are only as fresh as the
+day it was filed, and every item accepted since may have falsified one.**
+At Phase 2, before drafting: for each concrete asset the item names — a
+target repo, a file, a tool, a measurement — check what has been *accepted*
+since the item was created, and confirm the named thing still means what the
+body says it means. A backlog that ratchets is a backlog whose older entries
+silently rot.
+
+**Corollary — a premise can be arithmetically TRUE and still false in
+substance. Re-derive the CONCLUSION, not just the measurement.** *(W-78 retro,
+2026-09-04.)* W-78 was filed from F-42 § 8.1: *"the plan named 36 files; the
+lenses read 74 … so 38 were read but never planned. Safe in direction, wrong
+in substance."* Re-measured at Phase 2 a month later, **every number was still
+exactly right** — 36, 74, 38, unchanged. A premise check that re-ran the
+measurement would have confirmed the item and moved on.
+
+The interpretation was the part that had never been true. Partitioning those
+38 by the plan's *most specific* claim: 26 fall under a `sampled` entry the
+report already prints, 11 under a declared `notRead`, and **1** is genuinely
+uncounted. So the deliverable does not under-claim by 38. It **over-claims
+scope exclusion** — it told a customer three directories were `budget-cut`
+while citing four files inside them as finding evidence in the same document.
+The item's central sentence, *"safe in direction"*, was the exact inverse of
+the truth, and the numbers it rested on were flawless.
+
+The failure is a category error that survives measurement: a count over a
+BUCKET is not a claim about the WHOLE, and a partition inherits whatever the
+bucket boundary already assumed. It then propagated one level down — the spec's
+own AC-7 was written as "detection reports the 11 files", derived from that
+same partition, and the real answer is 18, because the 11 counted only
+*unplanned* reads while the other 7 sat in the contradiction bucket. Subtracted
+from one bucket, never added to the other. It took running the program against
+real data to see it, and it shipped as a disclosed deviation.
+
+So at Phase 2, for a premise that is a NUMBER: re-derive the sentence the
+number is being used to support, and ask which bucket it measures and what
+that bucket's boundary already excluded. Doctrine 59 is the same shape for
+prose — a comment's scope read as a claim about everything downstream. This is
+its arithmetic twin, and it is harder to catch, because re-running the
+calculation returns the same answer and feels like verification.
+
+**Corollary — a cross-repo item's premise can expire BEFORE the item is
+filed, and the ledger structurally cannot show it.** *(W-27 retro,
+2026-08-11.)* W-27 was filed to promote doctrine 9 into `prod-loop`.
+`prod-loop` **PR #1 already did most of that**, and had been open for 80
+minutes when the issue was created — same author, same F-14 retro, the PR
+being the fix and the issue the follow-up. Nobody connected them. It went
+stale, went `CONFLICTING`, and per the loop's own Phase 5 a conflicting PR
+runs **zero checks**, so it sat for five days looking like nothing was wrong
+while an item was groomed to redo its work.
+The cause is structural, not carelessness: a cross-repo item keeps its
+ledger on collabb and its PR in the target repo, and **nothing links the two
+directions**. Checking "what has been accepted since" cannot find it —
+an unmerged PR was never accepted, never appears in any issue query, and is
+invisible to every `gh issue` call the loop makes.
+
+**Second corollary — a dependency can be ACCEPTED with the half you need
+deferred, and the ledger structurally cannot show it.** *(W-42 retro,
+2026-08-15.)* W-42 declared a hard dependency on W-14 "because this item
+needs that key and routing to exist". W-14 was `accepted`, its checkbox
+ticked, and `selectNextEligible()` correctly treated W-42 as unblocked. What
+W-14's acceptance actually covered was the **routing code and the policy**;
+its four live-proof criteria were explicitly deferred to a follow-up that
+was still `pending` seven days later. So at Phase 2 the premise was not
+stale — it had **never been true**: no call had ever been made.
+
+Nothing queryable says so. The deferral lived in the *prose of the
+dependency's own acceptance comment*, which no label, no status and no
+`gh issue` filter reaches. Doctrine 19's sweep asks what has been accepted
+since; this is the case where the thing you depend on was accepted **with a
+hole in the exact place you need**.
+
+Cheap check, and it is one command: **for each declared dependency, read the
+last iteration-log comment on that issue and grep it for `deferred`,
+`follow-up`, `not verified`, or a `[SESSION —` marker.** A ticked dependency
+checkbox is a claim about an *item's status*, never about a *capability
+existing*. Where the item's own body names a capability ("this needs X to
+exist"), verify X directly — here, one `GET /v1/models` would have done it.
+So doctrine 19's Phase-2 sweep needs one more line, and it is nearly free:
+**for any item declaring a `Target repo:`, run `gh pr list --repo <target>
+--state open` and `git branch -a` there before drafting.** Read anything
+touching the same files. The cost is one command; the cost of skipping it
+here was a design panel and a spec written against a premise that had
+already been half-discharged.
+
+## Doctrine 27
+
+**The next free spec number is a fact that expires MID-SESSION. Doctrine 19
+is not enough on its own.** *(W-23 retro, 2026-08-09 — committed while
+writing the section that documents the same defect.)* Doctrine 19 says
+re-verify an item's premises at Phase 2. W-23 did, correctly: `ls docs/reqs/`
+showed F-30 as the highest, so it took F-31. Then W-18's
+`F-31-www-monorepo-migration.md` merged into `main`, the Phase-4 `git pull`
+brought it into the working tree, and nothing re-checked. Two specs shipped
+holding one number, and `CLAUDE.md` doctrine 24 was already citing "F-31"
+meaning the other one.
+
+The spec's own § 0 documents F-12 being spent twice and the silent
+unselectability that caused. The collision was created in the same session,
+hours after writing that paragraph, by an orchestrator that had read it.
+
+So the sharper rule: **doctrine 19 covers facts that changed before the
+session; this covers facts that change during one.** The ones at risk are
+exactly the facts a long session reads once and then writes into durable
+artifacts — the next free spec/item number, the default branch's HEAD, which
+items are accepted. Re-derive them at the moment of *writing*, not at the
+moment of planning, and re-check after every `git pull`.
+
+**And prefer the mechanical fix, because "remember to re-check" is precisely
+what failed here.** Filename uniqueness under `docs/reqs/` is enforced by
+`bash scripts/spec-ref-hygiene.sh` (F-75 / W-61), over `git ls-files`,
+aggregated with `sort | uniq -d`, in the existing `spec-ref-hygiene` CI step —
+not a second job. A gate is not green until it has been made to go red
+(doctrine 9); F-75's mutation rows are that proof. Filed as collabb#102 rather
+than smuggled into the W-23 retro commit.
+
+The ID grammar this shares with resolvability is deliberately **one literal per
+script and no third copy** — restating it here is the defect doctrine 21's W-42
+amendment describes. Read it from the authority:
+[`../reference/gates-and-registries.md`](../reference/gates-and-registries.md),
+"Every `F-`/`E-`/`W-` ID must resolve", which states the grammar and why each of
+its odd parts is load-bearing.
+

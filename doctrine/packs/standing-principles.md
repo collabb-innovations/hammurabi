@@ -1,0 +1,40 @@
+---
+id: "standing-principles"
+version: "1.0.0"
+summary: "Five standing principles: don't invent, durable state, context discipline, humans decide, retros are work."
+load_when: "Every session. These five are always in force."
+doctrines: [1, 2, 3, 4, 5]
+complex: false
+targets: ["cursor-rule", "agents-md", "grokbot-skill"]
+cursor:
+  globs: []
+  alwaysApply: true
+---
+## Doctrine 1
+
+**Don't invent things.** Resolve every named thing — tool names, config
+keys, endpoints, file paths, label names — against the target repo's code
+or docs before referencing it. If it doesn't exist, adding it is a
+decision to surface, not a default.
+
+## Doctrine 2
+
+**Durable state over context windows.** Anything a future session needs
+goes to the ledger (issue comments), a committed doc, or the spec — never
+only in conversation.
+
+## Doctrine 3
+
+**Context discipline.** This directory tree is large. Use subagents
+(Explore) for broad reading; read narrowly in the main context; don't load
+whole nested repos to answer one question.
+
+## Doctrine 4
+
+**Humans decide, agents choreograph.** Confirmation-gate anything
+outward-facing (email, messages, deploys) and anything hard to reverse.
+
+## Doctrine 5
+
+**Retro edits are real work.** When a loop iteration exposes a process
+flaw, fix the playbook/config/CLAUDE.md in the same session (loop Phase 7).

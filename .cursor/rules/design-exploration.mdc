@@ -1,0 +1,75 @@
+---
+description: "Redesign from the new requirement, compare distinct shapes, and explain every number."
+alwaysApply: false
+---
+<!-- collabb-doctrine-pack: id=design-exploration version=1.0.0 sha256=cfd7547d1366d1078c6c89efd6943eddcec788a41eb6277a960945b0e40417ad doctrines=90,91,92,93,94 -->
+# Design exploration
+
+Five rules for choosing a shape before code locks it in. An unlocked product choice stays an open question on the sketch. Do not treat silence as a decision, and do not stop a locked, reversible execution step to ask permission for it. Irreversible actions still wait for confirmation.
+
+## Doctrine 90
+
+Redesign from first principles
+
+When integrating a change, do not bolt it onto the existing design. Redesign as if the requirement had been a foundational assumption from the start.
+
+- Read the affected code and understand the current design.
+- Ask what you would build if you were writing this from scratch with the new requirement.
+- Propagate the change through every reference. Types, docs, examples, and the rationale.
+- Think through the whole redesign, then deliver it incrementally, one verifiable unit at a time.
+
+This is how option value survives contact with an existing design.
+
+## Doctrine 91
+
+Exhaust the design space
+
+When a UI interaction or an architectural decision has no precedent in the codebase, build two or three competing prototypes and compare them side by side before committing. Whole-shape alternatives, not a point fix inside one shape.
+
+The same rule applies when the decision depends on feel rather than on logic. A single sketch that "looks sufficient" is not a comparison.
+
+## Doctrine 92
+
+Experience first
+
+When implementation convenience conflicts with the consumer's delight, choose delight.
+
+- Every feature, control, and option must be justified.
+- Ship less, and ship it finished. Three polished features beat ten rough ones.
+- Prototype before committing. A throwaway sketch is cheaper than production code.
+- Get the details right. Transitions, alignment, spacing, feedback, and error states.
+- Tighten the core loop. A feature serves the central workflow or it gets out of the way.
+
+The consumer is whoever uses the work. For a UI, that is the end user. For a library or an internal API, it is the caller. The next engineer who maintains the code is a consumer too. Weigh their experience the same way, and explain impact from their side before implementation detail.
+
+Foundations serve the experience. Foundational thinking governs the sequence of work. This rule governs the target.
+
+## Doctrine 93
+
+Sketch types before code
+
+Sketch types, function signatures, and module boundaries before implementation fills them in. This is the sketch step only. It does not authorize a model roster, and it does not skip a later check.
+
+- Write the caller's usage first. A short quickstart plus two or three real call sites. Derive the type sketch from that usage. When they disagree, change the sketch.
+- Produce at least two structurally distinct candidates before choosing, even when the first looks sufficient. That is rule 91 made concrete.
+- Prefer the candidate that hides more complexity behind a smaller public surface. A rich interface may keep call chains short by concentrating capability. A deep call chain is not a deep module.
+- Screen every candidate. Revise or reject a shallow module (a large surface hiding little), leaked internals (wire types or a policy repeated in more than one module), temporal decomposition (modules named load, validate, transform, save), a pass-through method, split ownership of one piece of state, two ways to do one task, importable internals, or a hand-synced list. Give each piece of state one owner. If two actors can write it, isolate it.
+- Mark bodies as not implemented, and tricky logic as pseudocode, so a reader can trace data from the types and signatures alone.
+- Data structures first. Trace each dominant access pattern. If the answer is "add a map later", the structure is wrong.
+- Validate at the boundary, trust types inside, and keep a single source of truth per invariant.
+- Ship a one-page rationale next to the sketch. Problem, usage, the chosen shape, the other shape and why it lost, the tradeoffs accepted (each as "we accept X in exchange for Y"), and open questions phrased as questions.
+
+Deviations from the chosen sketch during implementation are signal to surface, not friction to absorb silently. If implementation keeps producing the same workaround, scrap the sketch and redesign as if the new constraint had been there on day one. The replacement should be smaller before it grows.
+
+## Doctrine 94
+
+Explain the number
+
+Before you trust, report, or act on a number you measured (a speedup, a regression, a throughput, a latency, or an eval result), find what limits it, and rule out that it measured something other than the work you think.
+
+- Ask why the number is not twice as good. Name the resource or the code path that bounds it. A core, a lock, the disk, the network, or the load generator. Get that from a profile or from counters taken during a run, then map it to source. A guess from reading the code is not a limiter. If you cannot say why it is not twice as good, you do not know what you measured.
+- List what else the number could be measuring, and rule each one out with evidence. Errors, skipped or cached work, code that never ran, a side left on default settings, noise, and a piece too small to matter end to end.
+- Keep the evidence with the number. Run count, spread, and the named limiter travel with the note or a linked artifact.
+- For an eval result, ask the same of the trials. Did every run do the task, does the gap hold across trials, and does the scenario matter?
+
+You skipped this when the evidence has no run count, no spread, or no named limiter, or when the time saved is larger than the time the changed piece took. A check that an output is real is a separate rule. This one is only about the number.

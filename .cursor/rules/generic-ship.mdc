@@ -1,0 +1,43 @@
+---
+description: "Merge only when the spec is locked and every required gate is green on the latest commit."
+alwaysApply: false
+---
+<!-- collabb-doctrine-pack: id=generic-ship version=1.0.0 sha256=3626a3e740df81b50861620737fdc00d86d33ac937e9d3f11db5e24b833476d1 doctrines=100 -->
+## Doctrine 100
+
+**Ship merges only when the spec is LOCKED and every gate is green on the latest commit; otherwise wait.**
+
+This is the generic ship playbook from #468. Continuum `.claude/commands/ship.md` and prod-loop `playbooks/generic-ship.md` were not readable from the collabb checkout that wrote this pack (the App token cannot see those repos), so this text is the locked policy, not a line merge of those files. Those copies are not deleted here. Collabb is the first adopter.
+
+Invocation, channel, index state, and job topology stay in `doctrine/packs/git-ci-and-ledger.md` (doctrines 20, 34, 42, 46, 51, 60, 65). This pack does not restate them. An empty check set is not green (doctrine 13). A red step stops later steps in the same job (doctrine 65), so each gate is its own job.
+
+### Gates
+
+| Gate | Job | Pass |
+|---|---|---|
+| CI | `ship-ci` | Every name in the project's required CI list has a completed `success` check-run on the head SHA. A missing name is not this job's failure. A run whose status is not `completed` is pending: the job waits, and that wait is not red and does not spend a repair try. |
+| Missing checks | `ship-missing-checks` | Every required CI name has a check-run on the head SHA. Absence fails. |
+| Independent review | `ship-independent-review` | `Cursor Bugbot` is completed `success` with `head_sha` equal to the head, or a review body contains `<!-- COLLABB_REVIEW` with `sha=<head>` and `verdict=CLEAN` or `verdict=FINDINGS`. A result bound to an older SHA does not count. `verdict=SKIP-SAME-MODEL` does not count. |
+| Lock | `authority-integrity` | Posted by the `collabb-prod-loop` App. An Actions job must not use that name. The default-branch ruleset requires this check at integration_id `5289273`. Passes only when the cited spec is LOCKED to its body hash. |
+| Closing | `ship-closes` | The pull request body contains Closes, Fixes, or Resolves for at least one open issue in the same repository. |
+
+`ship-ci` passing does not mean the names were present. `ship-missing-checks` is that check. Both have to be required, plus `ship-independent-review` and `authority-integrity`. `ship-merge` is not a required check. It performs the merge.
+
+Collabb's required CI names are `REQUIRED_CI` in `scripts/generic-ship.mjs`: the always-on jobs in `.github/workflows/repo-gates.yml` and `.github/workflows/doctrine-registry.yml`. Path-filtered workflows are not in that list. Another project passes its own comma-separated `required_ci` into `.github/workflows/generic-ship.yml`. An empty list does not merge.
+
+### Merge
+
+The `collabb-prod-loop` App merges, in the `authority-integrity` environment, with squash, pinning the head SHA. A human `gh` login does not. Merge only when all five gates pass and the pull request is not a draft. Otherwise wait for Justin.
+When a draft's required CI is green, the App marks it ready for review so Bugbot can run; pending or red leaves it a draft.
+
+The gate and merge jobs run the script from collabb `main`. They do not execute pull-request code. The eval job runs on `pull_request` from the pull-request checkout and has no App token. They re-run when `repo gates`, `doctrine registry`, or `authority-integrity` completes. If Bugbot finishes later, re-run `generic-ship` with `workflow_dispatch` and the pull request number. That re-run is not a repair try.
+
+### Repair
+
+When a gate is red, repair at most 3 tries or 60 minutes, whichever comes first. Then stop and hand the pull request to Justin. The workflow does not retry the repair. A pending check is not red and does not spend a try.
+
+### Hooks
+
+Project phases are config, not edits to this pack. The phases named for the continuum copy (outage check, wrangler, eval, local end-to-end fallback, live-bundle smoke) are that project's required check names or its own caller. They are not copied here, because that file was not readable.
+
+Fixtures for green, red, missing-check, stale review or Bugbot, an unlocked spec, and pending checks live in `scripts/generic-ship-fixtures/` and run with `node scripts/generic-ship.mjs --evals`.

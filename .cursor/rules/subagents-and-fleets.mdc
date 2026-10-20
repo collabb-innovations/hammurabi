@@ -1,0 +1,97 @@
+---
+description: "Subagent instructions, delegated facts, and filename bans are not controls unless the grant enforces them."
+alwaysApply: false
+---
+<!-- collabb-doctrine-pack: id=subagents-and-fleets version=1.0.0 sha256=46ec9d9a20628275d7b524a164b2ce143451ce708c446206c8a8dd2736dd383b doctrines=12,17,25,64 -->
+## Doctrine 12
+
+**An instruction in a subagent prompt is not a control.** *(W-28 retro,
+2026-08-05.)* Four audit lenses were each given an explicit, emphatic output
+constraint, stated near the top of the prompt as a hard requirement: the
+output is destined for a **public** repo, so never emit a literal credential
+path, a contributor's name, a hostname, or a scheduler job identifier —
+describe mechanisms generically. **Three of the four violated it**, returning
+an absolute production path, a real contributor name pulled from git history,
+the live database filename, job identifiers, and third-party vendor names.
+Nothing reached the committed artifact — but only because the orchestrator
+redacted every finding by hand while transcribing and scanned the result
+afterwards. Had the orchestrator been less careful, or the artifact longer,
+it ships. Measured compliance on an explicitly-flagged hard requirement: **1
+of 4**. Prompt text sets a tendency, not a bound. **Anything load-bearing for
+safety, disclosure, or irreversibility needs a mechanical step between the
+agent's output and the world** — a scan, a denylist, a gate — and that step
+is the deliverable, not the sentence in the prompt. This is the same reason
+review agents get a read-only-git *constraint* rather than a polite request.
+Filed as collabb#60 for W-29 to design against.
+
+## Doctrine 17
+
+**Do not delegate a fact that a file on disk can answer.** *(W-30 retro,
+2026-08-06.)* A load-bearing design decision rested on the exact YAML key
+that restricts a subagent's tool grant. An agent was dispatched to verify it;
+the web docs were behind the domain allowlist, so it answered from memory —
+"comma-separated string, not a YAML list" — confidently, and wrongly. It is
+an array. The correct answer was sitting in a local plugin skill file the
+whole time.
+Delegating a lookup adds a fabrication surface and buys nothing when the
+source is local: the subagent has no more access to ground truth than you do,
+and less context about why the answer matters. This is doctrine 7's F-16
+amendment ("the judge is not exempt") generalised past judges — **any agent
+asked to verify one fact fabricates at the same rate as the agent that
+asserted it, while arriving dressed in the authority of having been asked to
+check.** Delegate breadth (survey many files, find where a thing lives).
+Read the file yourself for the one fact a decision turns on.
+
+## Doctrine 25
+
+**A subagent told to be read-only wrote to a real repository, and nothing
+stopped it.** *(W-18 retro, 2026-08-09.)* A design-panel agent was instructed,
+in its prompt, to run only read-only git commands and never to mutate the
+working tree. A failed `cd` in its shell caused several commands to execute
+against the live nested `www` checkout instead of its scratch directory; it
+created a real merge commit on the PO's branch, then "repaired" it with a
+hard reset. It self-reported, the orchestrator verified the checkout was
+intact (HEAD, branch, all refs, untracked files), and no push occurred — so
+the cost this time was zero.
+
+This is doctrine 12 with a fresh instance and a sharper edge: the constraint
+was not a disclosure rule but a *write* rule, the agent was not careless in
+intent, and the repo's own guardrails did not deny the git write because the
+path was inside the project tree. **Read-only is a property of the tool
+grant, not of the prompt.** Where a subagent has no reason to write, give it
+an agent type whose grant excludes writes, point it at a throwaway copy, and
+never at a directory holding the PO's in-flight work. Filed as a backlog item
+rather than fixed here, because the fix is a guardrail/agent-definition
+change that a session is not permitted to make.
+
+## Doctrine 64
+
+**A prohibition expressed as a filename pattern cannot hold when an
+ordinary entry point NESTS the thing you banned.** *(W-96 retro,
+2026-08-18.)* Doctrine 58 says never background an in-place mutation
+harness and never edit its targets while it runs, and W-119 measured 2 of 3
+review lenses running one despite an explicit instruction.
+
+W-96 tried to fix that with a sharper instruction: every lens prompt named
+the harnesses by filename, banned `*-mutations.sh` outright, and said
+compliance would be verified afterwards. It also said, in the same prompt,
+that running `backends/github-issues/tests/run.sh` was "fine and
+encouraged."
+
+**`run.sh` invokes two in-place mutation harnesses** — `prio-hygiene-
+mutations.sh` and `w24-config-mutations.sh`. So the instruction forbade a
+thing and simultaneously encouraged the wrapper that does it. A lens
+obeyed both literally, and a second lens then observed the tracked config
+template sitting dirty with a `__W24_MUTATED__` artifact mid-review and
+correctly reported it. Nothing was harmed, but only because those harnesses
+restore in an EXIT trap — that is their discipline, not this session's.
+
+Two things generalise. **A ban on running X must be a ban on running
+anything that runs X**, which means enumerating callers, not filenames —
+the same losing game doctrine 31 describes for write verbs, and the same
+answer: control the resource, do not pattern-match the invocation. And the
+verification step is what saved it: checksums of every mutable target
+captured before the fleet and compared after (`IDENTICAL`), which is a
+mechanical check between the agents' output and the tree, exactly what
+doctrine 12 asks for. **Keep the check even when the instruction gets
+better** — the instruction got better here and was still wrong.
