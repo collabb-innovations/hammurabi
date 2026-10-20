@@ -1,0 +1,27 @@
+{
+  "registry_version": "1.3.1",
+  "packs": {
+    "change-strategy": "1.0.0",
+    "code-shape": "1.0.0",
+    "design-exploration": "1.0.0",
+    "design-panels": "1.0.0",
+    "gates-coverage-lists": "1.0.0",
+    "gates-coverage-rows": "1.0.0",
+    "gates-fixtures": "1.0.0",
+    "gates-harness-safety": "1.0.0",
+    "gates-oracle-indistinguishable": "1.0.0",
+    "gates-oracle-reach": "1.0.0",
+    "gates-oracle-verdict": "1.0.0",
+    "generic-ship": "1.0.0",
+    "git-ci-and-ledger": "1.0.0",
+    "model-routing": "1.0.0",
+    "nfr-sli-slo": "1.0.0",
+    "review-and-correct": "1.0.0",
+    "specs-acceptance": "1.0.0",
+    "specs-deviations": "1.0.0",
+    "specs-premises": "1.0.0",
+    "standing-principles": "1.0.0",
+    "subagents-and-fleets": "1.0.0",
+    "writing": "1.0.0"
+  }
+}
