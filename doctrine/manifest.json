@@ -1,5 +1,5 @@
 {
-  "registry_version": "1.3.2",
+  "registry_version": "1.3.3",
   "packs": {
     "change-strategy": "1.0.0",
     "code-shape": "1.0.0",
@@ -8,7 +8,7 @@
     "gates-coverage-lists": "1.0.0",
     "gates-coverage-rows": "1.0.0",
     "gates-fixtures": "1.0.0",
-    "gates-harness-safety": "1.0.0",
+    "gates-harness-safety": "1.0.1",
     "gates-oracle-indistinguishable": "1.0.0",
     "gates-oracle-reach": "1.0.0",
     "gates-oracle-verdict": "1.0.0",
