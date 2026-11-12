@@ -1,5 +1,5 @@
 {
-  "registry_version": "1.3.3",
+  "registry_version": "1.5.0",
   "packs": {
     "change-strategy": "1.0.0",
     "code-shape": "1.0.0",
@@ -14,6 +14,7 @@
     "gates-oracle-verdict": "1.0.0",
     "generic-ship": "1.0.0",
     "git-ci-and-ledger": "1.0.0",
+    "implicit-lifecycle": "1.0.0",
     "model-routing": "1.0.0",
     "nfr-sli-slo": "1.0.0",
     "review-and-correct": "1.0.0",
@@ -22,6 +23,7 @@
     "specs-premises": "1.0.0",
     "standing-principles": "1.0.0",
     "subagents-and-fleets": "1.0.0",
+    "ui-proposal": "1.0.0",
     "writing": "1.0.0"
   }
 }
